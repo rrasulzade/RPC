@@ -28,7 +28,7 @@ typedef enum {
 
 
 typedef enum {
-	SUCCESS = 0;
+	SUCCESS = 0
 	
 	
 	
@@ -47,7 +47,7 @@ typedef union {
 
 typedef struct {
 	short addr_type;		// can be	ADDR_TYPE_IP or ADDR_TYPE_HOSTNAME
-	IP_or_HOST;
+	IP_or_HOST addr;
 } server_identifier;
 
 
@@ -59,8 +59,8 @@ typedef struct {
 
 
 typedef struct {
-	server_identifier	s_id;
-	unsigned short 		s_port;
+	server_identifier s_id;
+	unsigned short s_port;
 } location;
 
 
