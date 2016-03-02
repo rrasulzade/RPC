@@ -47,6 +47,8 @@ int Binder::handle_message(int sockFD){
     int msg_type;
     char *msg;
 
+    // msg_type = *(int*)(msg+4);
+
     int status = recv(sockFD, &msg_len, sizeof(msg_len), 0);
     if(status < 0){
     	cerr << "ERROR: on receiving message length" << endl;
@@ -60,13 +62,13 @@ int Binder::handle_message(int sockFD){
    	}
 
 	//int msg_len = representInDecimal((unsigned char*)length);
-	msg = new char[msg_len+1];					  		   	// << +1 is already done ????
-	status = recv(sockFD, msg, msg_len+1, 0);				// << +1 is already done ????
-	if(status < 0){
+	msg = new char[msg_len];					  		   	// << +1 is already done ????
+	status = recv(sockFD, msg, msg_len, 0);				    // << +1 is already done ????
+	if(status < 0){  
     	cerr << "ERROR: on receiving message" << endl;
     	return status;
    	}
-   	msg[msg_len] = '\0';
+   	// msg[msg_len] = '\0';   // already null terminated
 
     // connection is closed
    	if(status == 0){
@@ -77,14 +79,15 @@ int Binder::handle_message(int sockFD){
    	
    	switch(msg_type){
    		case REGISTER:
+   			proc_registration(msg_len, msg);
    			break;
    		case LOC_REQUEST:
    			break;
    		case EXECUTE:
    			break;
    		case TERMINATE:
-   			terminateAllServers();
-   			status = TERMINATE_ALL;								// define macro 
+   			terminateServers();
+   			status = TERMINATE_ALL;								 
    			break;
    	}
 
@@ -93,8 +96,45 @@ int Binder::handle_message(int sockFD){
 }
 
 
+void Binder::proc_registration(int msg_len, char * message){
+	proc_sig proc;
+	location loc;
+	
+	// memset
+	// memset
+
+	// read server identifier and server port
+	loc.s_id = *(server_identifier*) message;
+	loc.s_port = *(unsigned short *)(message + sizeof(server_identifier));
+	
+	char *p = message + sizeof(server_identifier) + sizeof(unsigned short);
+
+	// read procedure name
+	strncpy(proc.name, p, MAX_PROC_NAME_SIZE);
+	proc.name[MAX_PROC_NAME_SIZE] = '\0';
+	p += (MAX_PROC_NAME_SIZE + 1);
+ 	
+ 	// find length of argTypes
+    int argLen = (msg_len - sizeof(server_identifier) - sizeof(unsigned short) - (MAX_PROC_NAME_SIZE + 1)) / 4;
+	proc.argTypes = new int[argLen];
+
+	// read argTypes
+    for(int i = 0; i < argLen; i++){
+    	proc.argTypes[i] = *(int*)p;
+    	p += 4;
+    }
+
+    // this server has already registered this procedure, 
+    // override the previous procedure
+    if(is_registered(proc, loc)){
+
+    }
+
+}
+
+
 // send TERMINATE message to all servers to stop
-void Binder::terminateAllServers(){
+void Binder::terminateServers(){
 	int type = (int) TERMINATE;
 	while(!server_queue.empty()){
 		int status = send(server_queue.front().s_port, &type, sizeof(type), 0);
@@ -120,21 +160,21 @@ void Binder::create_binder(){
     binder_sockaddr.sin_port = 0;
     
     // create a socket
-    this->binder_sockFD = socket(AF_INET, SOCK_STREAM, 0);
-    if (this->binder_sockFD < 0) {
+    binder_sockFD = socket(AF_INET, SOCK_STREAM, 0);
+    if (binder_sockFD < 0) {
         cerr << "ERROR: server socket cannot initialized" << endl;
         exit(-1);
     }
     
     // bind the binder socket to the current IP address on port
-    status = bind(this->binder_sockFD, (struct sockaddr*)&binder_sockaddr, (socklen_t)len);
+    status = bind(binder_sockFD, (struct sockaddr*)&binder_sockaddr, (socklen_t)len);
     if(status < 0){
         cerr << "ERROR: on binding" << endl;
         exit(-1);
     }
     
     // Listen for SOMAXCONN = 128 clients
-    listen(this->binder_sockFD, SOMAXCONN);
+    listen(binder_sockFD, SOMAXCONN);
     
     // get hostname and print
     char hostname[64];
@@ -142,32 +182,31 @@ void Binder::create_binder(){
     cout << "BINDER_ADDRESS " << hostname << endl;
     
     // get binder port number and print
-    getsockname(this->binder_sockFD, (struct sockaddr *)&sock_in, (socklen_t *)&len);
+    getsockname(binder_sockFD, (struct sockaddr *)&sock_in, (socklen_t *)&len);
     cout << "BINDER_PORT " << ntohs(sock_in.sin_port) << endl;
 }
 
 
-int main(int argc, const char * argv[]) {
-    sockaddr_in connected_sockaddr;
+void Binder::start(){
+	sockaddr_in connected_sockaddr;
     int connected_sockFD , status;
     int len = sizeof(sockaddr_in);
     bool stop = false;
 
-    Binder binder;
-    binder.create_binder();
+    create_binder();
 
     // save socket of each connection in this vector
     vector<int> connections;
 
     // initially add binder socket to the vector
-	connections.push_back(binder.binder_sockFD);
+	connections.push_back(binder_sockFD);
     
     while (!stop) {
 
     	// setup socket file descriptor and find max value of fd so far 
         fd_set readfds;
 	    FD_ZERO(&readfds);
-	    int max_fd = binder.binder_sockFD;
+	    int max_fd = binder_sockFD;
 	    for(int i=0; i < connections.size(); i++){
 	    	FD_SET(connections[i], &readfds);
 	    	if(connections[i] > max_fd)
@@ -192,9 +231,9 @@ int main(int argc, const char * argv[]) {
             // there is an incoming connection
             if(FD_ISSET(connections[i], &readfds)){
 
-                if(connections[i] == binder.binder_sockFD){
+                if(connections[i] == binder_sockFD){
                     // connect to client, accept the data
-                    connected_sockFD = accept(binder.binder_sockFD, (sockaddr*)&connected_sockaddr, (socklen_t *)&len);
+                    connected_sockFD = accept(binder_sockFD, (sockaddr*)&connected_sockaddr, (socklen_t *)&len);
                     if (connected_sockFD < 0) {
                         cerr << "ERROR: on accept()" << endl;
                         exit(-1);
@@ -206,7 +245,7 @@ int main(int argc, const char * argv[]) {
                 }else{
                     // already accepted, receive msg and capitalaze text
                     cout << "handle_message " << connected_sockFD << endl;
-                    status = binder.handle_message(connections[i]);
+                    status = handle_message(connections[i]);
 
                     // TERMINATE msg is received 
                     if (status == TERMINATE_ALL){
@@ -226,6 +265,14 @@ int main(int argc, const char * argv[]) {
         }
     }
     
-    close(binder.binder_sockFD);
+    close(binder_sockFD);
+}
+
+
+
+
+int main(int argc, const char * argv[]) {
+    Binder binder;
+    binder.start();
     return 0;
 }

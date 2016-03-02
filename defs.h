@@ -6,7 +6,7 @@
 
 
 #define		MAX_PROC_NAME_SIZE		64
-#define		MAX_HOSTNAME_SIZE		64
+#define		MAX_HOSTNAME_SIZE		256
 
 #define		ADDR_TYPE_IP			0
 #define		ADDR_TYPE_HOSTNAME		1
@@ -46,7 +46,7 @@ typedef union {
 
 
 typedef struct {
-	short addr_type;		// can be	ADDR_TYPE_IP or ADDR_TYPE_HOSTNAME
+	int addr_type;		// can be	ADDR_TYPE_IP or ADDR_TYPE_HOSTNAME
 	IP_or_HOST addr;
 } server_identifier;
 
