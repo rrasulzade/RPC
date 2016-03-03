@@ -456,7 +456,7 @@ void Binder::printMap(){
 	debug("print");
 	map<ProcSignature, set<ProcLocation> >::iterator map_it = sig_to_location.begin();
 	for(; map_it != sig_to_location.end(); map_it++){
-		cout << map_it->first.procInfo.proc_name << " -> ";
+		cout << map_it->first.procInfo.proc_name <<  map_it->first.procInfo.argLen <<" -> " << endl;
 		set<ProcLocation>:: iterator set_it = map_it->second.begin();
 		for(; set_it != map_it->second.end(); set_it++){
 			cout << set_it->locationInfo.s_id.addr.hostname << endl;
@@ -530,17 +530,43 @@ int main(int argc, const char * argv[]) {
   	serverC.s_id.addr.hostname[MAX_HOSTNAME_SIZE] = '\0';
 
 
+  	///////////////////   F  //////////////////////////////////
   	int requestLen = sizeof(location) + sizeof(proc_sig);
-  	char *request1 = new char[requestLen+1];
-
+  	char request1[requestLen+1];
   	memcpy(request1, &serverA, sizeof(location));
-  	request1 += sizeof(location);
-
-  	memcpy(request1, &f, sizeof(proc_sig));
-
+  	memcpy(request1 +sizeof(location), &f, sizeof(proc_sig));
   	request1[requestLen] = '\0';
 
   	binder.proc_registration(requestLen, request1);
+
+
+  	char request2[requestLen+1];
+  	memcpy(request2, &serverB, sizeof(location));
+  	memcpy(request2 +sizeof(location), &f, sizeof(proc_sig));
+  	request2[requestLen] = '\0';
+
+  	binder.proc_registration(requestLen, request2);
+
+
+  	///////////////////   G  //////////////////////////////////
+
+  	// char request3[requestLen+1];
+  	// memcpy(request3, &serverB, sizeof(location));
+  	// memcpy(request3 +sizeof(location), &g, sizeof(proc_sig));
+  	// request3[requestLen] = '\0';
+
+  	// binder.proc_registration(requestLen, request3);
+
+
+  	// char request4[requestLen+1];
+  	// memcpy(request4, &serverC, sizeof(location));
+  	// memcpy(request4 +sizeof(location), &g, sizeof(proc_sig));
+  	// request4[requestLen] = '\0';
+
+  	// binder.proc_registration(requestLen, request4);
+
+
+
   	binder.printMap();
 
 
