@@ -23,7 +23,7 @@ using namespace std;
 
 // converts the first letter of each word in the text to uppercase
 void capitalize(char* text) {
-    for (int i = 0; i < strlen(text); i++) {
+    for (unsigned int i = 0; i < strlen(text); i++) {
         if (i == 0 || text[i-1] == ' ' || text[i-1] == '\t') {
             text[i] = toupper(text[i]);
         } else {
@@ -375,7 +375,7 @@ void Binder::start(){
         fd_set readfds;
 	    FD_ZERO(&readfds);
 	    int max_fd = binder_sockFD;
-	    for(int i=0; i < connections.size(); i++){
+	    for(unsigned int i=0; i < connections.size(); i++){
 	    	FD_SET(connections[i], &readfds);
 	    	if(connections[i] > max_fd)
 	    		max_fd = connections[i];
@@ -395,7 +395,7 @@ void Binder::start(){
         }
 
         // check all existing connections
-        for(int i = 0; i < connections.size(); i++){
+        for(unsigned int i = 0; i < connections.size(); i++){
             // there is an incoming connection
             if(FD_ISSET(connections[i], &readfds)){
 
