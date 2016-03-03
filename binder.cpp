@@ -14,6 +14,7 @@
 #include <netdb.h>
 
 #include "binder.h"
+#include "rpc.h"
 
 using namespace std;
 
@@ -37,7 +38,7 @@ int representInDecimal(unsigned char *buf){
 }
 
 
-//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////  ProcSignature  ///////////////////////////////////////////////
 
 
 bool operator==(const ProcSignature& lhs, const ProcSignature& rhs) {
@@ -70,7 +71,7 @@ bool operator< (const ProcSignature& lhs, const ProcSignature& rhs){
 }
 
 
-//////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////// ProcLocation  ///////////////////////////////////////
 
 
 bool operator==(const ProcLocation& lhs, const ProcLocation& rhs){
@@ -90,7 +91,7 @@ bool operator< (const ProcLocation& lhs, const ProcLocation& rhs){
 
 
 
-//////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////  Binder  ////////////////////////////////////////////
 
 
 
@@ -105,6 +106,7 @@ Binder::~Binder(void){
     }
 
 }
+
 
 
 // receive message, 
@@ -148,8 +150,7 @@ int Binder::handle_message(int sockFD){
    			proc_registration(msg_len, msg);
    			break;
    		case LOC_REQUEST:
-   			break;
-   		case EXECUTE:
+   			proc_location_request(msg_len, msg);
    			break;
    		case TERMINATE:
    			terminateServers();
@@ -159,6 +160,62 @@ int Binder::handle_message(int sockFD){
 
     delete msg;
     return status;
+}
+
+
+
+void Binder::proc_location_request(int msg_len, char * message){
+	ProcSignature proc;
+	memset(&proc, 0, sizeof(ProcSignature));
+
+	strncpy(proc.procInfo.proc_name, message, MAX_PROC_NAME_SIZE);
+	proc.procInfo.proc_name[MAX_PROC_NAME_SIZE] = '\0';
+
+	message += (MAX_PROC_NAME_SIZE + 1);
+
+	// find length of argTypes
+    int argLen = *(int*) message; 
+    proc.procInfo.argLen = argLen;
+	proc.procInfo.argTypes = new int[argLen+1];
+
+	// read argTypes
+	message += sizeof(int);
+	memcpy(proc.procInfo.argTypes, message, (argLen+1)*sizeof(int));
+
+	map<ProcSignature, set<ProcLocation> >::iterator map_it;
+    map_it = sig_to_location.find(proc);
+
+    try{
+    	if(map_it != sig_to_location.end()){
+    		ProcLocation server_location = roundRobinServer(map_it->second);
+    		cout << "send LOC_SUCCESS" << endl;
+    	}else{
+    		throw failure();
+    	}
+    }catch(failure& e){
+    	cout << "send LOC_FAILURE" << endl; 
+    }
+
+
+}
+
+ProcLocation Binder::roundRobinServer(set<ProcLocation>& loc_set){
+	if (loc_set.size() == 1){
+		return *(loc_set.begin());
+	}
+
+	set<ProcLocation>::iterator set_it;
+	list<ProcLocation>::iterator list_it = server_queue.begin();
+	for(;list_it != server_queue.end(); list_it++){
+		set_it = loc_set.find(*list_it);
+		if(set_it != loc_set.end()){
+			list_it = server_queue.erase(list_it);
+			server_queue.push_back(*set_it);
+			break;
+		}
+	}
+
+	return *set_it;
 }
 
 
@@ -183,7 +240,7 @@ void Binder::proc_registration(int msg_len, char * message){
 	p += (MAX_PROC_NAME_SIZE + 1);
  	
  	// find length of argTypes
-    int argLen = *(int*) p; 			//(msg_len - sizeof(server_identifier) - sizeof(unsigned short) - (MAX_PROC_NAME_SIZE + 1)) / 4;
+    int argLen = *(int*) p; 
     proc.procInfo.argLen = argLen;
 	proc.procInfo.argTypes = new int[argLen+1];
 
@@ -194,33 +251,63 @@ void Binder::proc_registration(int msg_len, char * message){
     map<ProcSignature, set<ProcLocation> >::iterator map_it;
     map_it = sig_to_location.find(proc);
 
+    debug("Data Parsed");
+
     // if this server has already registered this procedure, 
     // override the previous procedure
-    // otherwise, add this server to procedure location set 
-    if(map_it != sig_to_location.end()){
-    	map_it->second.insert(loc);
-    	
-    }else{
-    	// no such entry is found, add new one to database
-   		set<ProcLocation> loc_set;
-   		loc_set.insert(loc); 
-    	sig_to_location.insert(pair<ProcSignature, set<ProcLocation> >(proc, loc_set));
-    }
+    // otherwise, add this server to procedure location set
+    try{ 
+	    if(map_it != sig_to_location.end()){
+	    	set<ProcLocation>::iterator set_it = map_it->second.begin();
+	    	for(; set_it != map_it->second.end(); set_it++){
+	    		ProcLocation tmp = *set_it;
+	    		if (memcmp(&loc, &tmp, sizeof(ProcLocation)) == 0){
+	    			throw failure();
+	    		}
+	    	}
 
-    next_prior_id++;
+	    	if(set_it == map_it->second.end()){
+	    		map_it->second.insert(loc);
+	    		addToServerQueue(map_it->second);
+	    	}
+	    }else{
+	    	// no such entry is found, add new one to database
+	   		set<ProcLocation> loc_set;
+	   		loc_set.insert(loc); 
+	    	sig_to_location.insert(pair<ProcSignature, set<ProcLocation> >(proc, loc_set));
 
+	    	debug("Add new entry");
+	    }
+
+
+	    next_prior_id++;
+	    // send SUCCESS  <msg_type + msg_size + REGISTER_SUCCESS >
+	}catch(failure& e){
+		// send FAILURE  <msg_type + msg_size + REGISTER_FAILURE >
+	}
 }
+
+
+
+void Binder::addToServerQueue(set<ProcLocation>& loc_set){
+	set<ProcLocation>::iterator set_it = loc_set.begin();
+	for(; set_it != loc_set.end(); set_it++){
+		server_queue.push_back(*set_it);
+	}
+}
+
 
 
 // send TERMINATE message to all servers to stop
 void Binder::terminateServers(){
 	int type = (int) TERMINATE;
-	while(!server_queue.empty()){
-		int status = send(server_queue.front().locationInfo.s_port, &type, sizeof(type), 0);
-		server_queue.pop();
+	list<ProcLocation>::iterator list_it = server_queue.begin();
+
+	for(; list_it != server_queue.end(); list_it++){
+		int status = send(list_it->locationInfo.s_port, &type, sizeof(type), 0);
 		if(status < 0){
-			// cerr << "ERROR: on terminating servers"<< endl; 			//	??????? 
-			// exit(-1);
+			cerr << "ERROR: on terminating servers"<< endl; 			//	??????? 
+			exit(-1);
 		}
 	}
 }
@@ -349,11 +436,107 @@ void Binder::start(){
 
 
 
-//////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////  MAIN   ///////////////////////////////////////////////////
+
+
+// int main(int argc, const char * argv[]) {
+//     Binder binder;
+//     binder.start();
+//     return 0;
+// }
+
+
+
+////////////////////////////////////////////  TEST   ///////////////////////////////////////////////////
+
+
+void Binder::printMap(){
+	debug("print");
+	map<ProcSignature, set<ProcLocation> >::iterator map_it = sig_to_location.begin();
+	for(; map_it != sig_to_location.end(); map_it++){
+		cout << map_it->first.procInfo.proc_name << " -> ";
+		set<ProcLocation>:: iterator set_it = map_it->second.begin();
+		for(; set_it != map_it->second.end(); set_it++){
+			cout << set_it->locationInfo.s_id.addr.hostname << " ";
+		}
+		cout << endl;
+	}
+}
+
 
 
 int main(int argc, const char * argv[]) {
     Binder binder;
-    binder.start();
+  	
+  	proc_sig f;
+  	char nameF[] = "f";
+  	strncpy(f.proc_name, nameF, MAX_PROC_NAME_SIZE);
+  	f.proc_name[MAX_PROC_NAME_SIZE] = '\0';
+  	f.argLen = 2;
+  	f.argTypes = new int[f.argLen+1];
+
+  	f.argTypes[0] = (1 << ARG_OUTPUT) | (ARG_INT << 16);           
+    f.argTypes[1] = (1 << ARG_INPUT)  | (ARG_INT << 16) | 10;
+    f.argTypes[2] = 0; 
+
+
+  	proc_sig g;
+  	char nameG[] = "g";
+  	strncpy(g.proc_name, nameG, MAX_PROC_NAME_SIZE);
+  	g.proc_name[MAX_PROC_NAME_SIZE] = '\0';
+  	g.argLen = 3;
+  	g.argTypes = new int[g.argLen+1];
+
+  	g.argTypes[0] = (1 << ARG_OUTPUT) | (ARG_INT << 16);
+  	g.argTypes[1] = (1 << ARG_INPUT) | (ARG_INT << 16);
+  	g.argTypes[2] = (1 << ARG_INPUT) | (ARG_INT << 16);
+  	g.argTypes[3] = 0;
+
+
+  	proc_sig h;
+  	char nameH[] = "h";
+  	strncpy(h.proc_name, nameH, MAX_PROC_NAME_SIZE);
+  	h.proc_name[MAX_PROC_NAME_SIZE] = '\0';
+  	h.argLen = 1;
+  	h.argTypes = new int[h.argLen+1];
+
+  	h.argTypes[0] = (1 << ARG_OUTPUT) | (1 << ARG_INPUT) | (ARG_LONG << 16) | 11;
+  	h.argTypes[1] = 0;
+
+
+
+  	location serverA;
+  	serverA.s_port = 555;
+  	serverA.s_id.addr_type = ADDR_TYPE_HOSTNAME;
+  	strncpy(serverA.s_id.addr.hostname, "serverA-002-RR", MAX_HOSTNAME_SIZE);
+  	serverA.s_id.addr.hostname[MAX_HOSTNAME_SIZE] = '\0';
+
+
+  	location serverB;
+  	serverB.s_port = 444;
+  	serverB.s_id.addr_type = ADDR_TYPE_HOSTNAME;
+  	strncpy(serverB.s_id.addr.hostname, "serverB-002-RR", MAX_HOSTNAME_SIZE);
+  	serverB.s_id.addr.hostname[MAX_HOSTNAME_SIZE] = '\0';
+
+
+  	location serverC;
+  	serverC.s_port = 333;
+  	serverC.s_id.addr_type = ADDR_TYPE_HOSTNAME;
+  	strncpy(serverC.s_id.addr.hostname, "serverC-002-RR", MAX_HOSTNAME_SIZE);
+  	serverC.s_id.addr.hostname[MAX_HOSTNAME_SIZE] = '\0';
+
+
+  	int requestLen = sizeof(location) + sizeof(proc_sig);
+  	char *request1 = new char[requestLen];
+
+  	memcpy(request1, &serverA, sizeof(location));
+  	request1 += sizeof(location);
+
+  	memcpy(request1, &f, sizeof(proc_sig));
+
+  	binder.proc_registration(requestLen, request1);
+
+  	binder.printMap();
+
     return 0;
 }
