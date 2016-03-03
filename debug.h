@@ -4,7 +4,7 @@
 
 
 
-#define 	debug(msg, ...) 		printf("DEBUG %s \n", msg);
+#define 	debug(msg, ...) 		printf("DEBUG %s \n", msg)
 
 
 #define __INFO(M, ...) fprintf(stderr, "[\033[1;32mINFO\033[0m] (%s:%d) " M "\n\r", __FILE__, __LINE__, ##__VA_ARGS__)

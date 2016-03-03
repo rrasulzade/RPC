@@ -14,7 +14,9 @@
 #include <netdb.h>
 
 #include "binder.h"
-#include "rpc.h"
+
+#include "debug.h"
+
 
 using namespace std;
 
@@ -276,7 +278,7 @@ void Binder::proc_registration(int msg_len, char * message){
 	   		loc_set.insert(loc); 
 	    	sig_to_location.insert(pair<ProcSignature, set<ProcLocation> >(proc, loc_set));
 
-	    	debug("Add new entry");
+	    	debug("Add new entry");	    		
 	    }
 
 
@@ -457,7 +459,9 @@ void Binder::printMap(){
 		cout << map_it->first.procInfo.proc_name << " -> ";
 		set<ProcLocation>:: iterator set_it = map_it->second.begin();
 		for(; set_it != map_it->second.end(); set_it++){
-			cout << set_it->locationInfo.s_id.addr.hostname << " ";
+			cout << set_it->locationInfo.s_id.addr.hostname << endl;
+			cout << set_it->prior_id << endl;
+	    	cout << set_it->locationInfo.s_port << endl;
 		}
 		cout << endl;
 	}
@@ -527,16 +531,19 @@ int main(int argc, const char * argv[]) {
 
 
   	int requestLen = sizeof(location) + sizeof(proc_sig);
-  	char *request1 = new char[requestLen];
+  	char *request1 = new char[requestLen+1];
 
   	memcpy(request1, &serverA, sizeof(location));
   	request1 += sizeof(location);
 
   	memcpy(request1, &f, sizeof(proc_sig));
 
-  	binder.proc_registration(requestLen, request1);
+  	request1[requestLen] = '\0';
 
+  	binder.proc_registration(requestLen, request1);
   	binder.printMap();
 
+
+  	// delete [] request1;
     return 0;
 }
