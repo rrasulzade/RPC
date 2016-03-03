@@ -473,6 +473,7 @@ int main(int argc, const char * argv[]) {
     Binder binder;
   	
   	proc_sig f;
+  	memset(&f, 0, sizeof(proc_sig));
   	char nameF[] = "f";
   	strncpy(f.proc_name, nameF, MAX_PROC_NAME_SIZE);
   	f.proc_name[MAX_PROC_NAME_SIZE] = '\0';
@@ -485,6 +486,7 @@ int main(int argc, const char * argv[]) {
 
 
   	proc_sig g;
+  	memset(&g, 0, sizeof(proc_sig));
   	char nameG[] = "g";
   	strncpy(g.proc_name, nameG, MAX_PROC_NAME_SIZE);
   	g.proc_name[MAX_PROC_NAME_SIZE] = '\0';
@@ -498,6 +500,7 @@ int main(int argc, const char * argv[]) {
 
 
   	proc_sig h;
+  	memset(&h, 0, sizeof(proc_sig));
   	char nameH[] = "h";
   	strncpy(h.proc_name, nameH, MAX_PROC_NAME_SIZE);
   	h.proc_name[MAX_PROC_NAME_SIZE] = '\0';
@@ -510,6 +513,7 @@ int main(int argc, const char * argv[]) {
 
 
   	location serverA;
+  	memset(&serverA, 0, sizeof(location));
   	serverA.s_port = 555;
   	serverA.s_id.addr_type = ADDR_TYPE_HOSTNAME;
   	strncpy(serverA.s_id.addr.hostname, "serverA-002-RR", MAX_HOSTNAME_SIZE);
@@ -517,6 +521,7 @@ int main(int argc, const char * argv[]) {
 
 
   	location serverB;
+  	memset(&serverB, 0, sizeof(location));
   	serverB.s_port = 444;
   	serverB.s_id.addr_type = ADDR_TYPE_HOSTNAME;
   	strncpy(serverB.s_id.addr.hostname, "serverB-002-RR", MAX_HOSTNAME_SIZE);
@@ -524,6 +529,7 @@ int main(int argc, const char * argv[]) {
 
 
   	location serverC;
+  	memset(&serverC, 0, sizeof(location));
   	serverC.s_port = 333;
   	serverC.s_id.addr_type = ADDR_TYPE_HOSTNAME;
   	strncpy(serverC.s_id.addr.hostname, "serverC-002-RR", MAX_HOSTNAME_SIZE);
@@ -534,7 +540,7 @@ int main(int argc, const char * argv[]) {
   	int requestLen = sizeof(location) + sizeof(proc_sig);
   	char request1[requestLen+1];
   	memcpy(request1, &serverA, sizeof(location));
-  	memcpy(request1 +sizeof(location), &f, sizeof(proc_sig));
+  	memcpy(request1 + sizeof(location), &f, sizeof(proc_sig));
   	request1[requestLen] = '\0';
 
   	binder.proc_registration(requestLen, request1);
