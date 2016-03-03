@@ -2,9 +2,9 @@
 #include <string>
 #include <vector>
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <unistd.h>
 
 #include <sys/types.h>
@@ -37,8 +37,74 @@ int representInDecimal(unsigned char *buf){
 }
 
 
-Binder::Binder(void){}
-Binder::~Binder(void){}
+//////////////////////////////////////////////////////////////////////////////////////////
+
+
+bool operator==(const ProcSignature& lhs, const ProcSignature& rhs) {
+	int str_compare = strcmp(lhs.procInfo.proc_name, rhs.procInfo.proc_name);
+	if(str_compare != 0 || lhs.procInfo.argLen != rhs.procInfo.argLen){
+		return false;
+	}else{
+		// for (int i = 0; i < lhs.procInfo.argLen; ++i){
+			if(memcmp(lhs.procInfo.argTypes, rhs.procInfo.argTypes, (lhs.procInfo.argLen+1)*sizeof(int)) != 0){
+				return false;
+			}
+		// }
+	}
+	return true;
+}
+
+
+bool operator< (const ProcSignature& lhs, const ProcSignature& rhs){
+	int str_compare = strcmp(lhs.procInfo.proc_name, rhs.procInfo.proc_name);
+	if(str_compare >= 0 || lhs.procInfo.argLen != rhs.procInfo.argLen){
+		return false;
+	}else{
+		// for (int i = 0; i < lhs.procInfo.argLen; ++i){
+			if(memcmp(lhs.procInfo.argTypes, rhs.procInfo.argTypes, (lhs.procInfo.argLen+1)*sizeof(int)) >= 0){
+				return false;
+			}
+		// }
+	}
+	return true;
+}
+
+
+//////////////////////////////////////////////////////////////////////////////////////////
+
+
+bool operator==(const ProcLocation& lhs, const ProcLocation& rhs){
+	if(lhs.prior_id != rhs.prior_id){
+		return false;
+	}
+	return true;
+}
+
+
+bool operator< (const ProcLocation& lhs, const ProcLocation& rhs){
+	if(lhs.prior_id >= rhs.prior_id){
+		return false;
+	}
+	return true;
+}
+
+
+
+//////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+Binder::Binder(void){
+	next_prior_id = 0;
+}
+
+Binder::~Binder(void){
+	map<ProcSignature, set<ProcLocation> >::iterator map_it = sig_to_location.begin();
+    for(; map_it != sig_to_location.end(); map_it++){
+    	delete [] map_it->first.procInfo.argTypes;
+    }
+
+}
 
 
 // receive message, 
@@ -97,38 +163,51 @@ int Binder::handle_message(int sockFD){
 
 
 void Binder::proc_registration(int msg_len, char * message){
-	proc_sig proc;
-	location loc;
+	ProcSignature proc;
+	ProcLocation loc;
 	
-	// memset
-	// memset
+	memset(&proc, 0, sizeof(ProcSignature));
+	memset(&loc, 0, sizeof(ProcLocation));
 
 	// read server identifier and server port
-	loc.s_id = *(server_identifier*) message;
-	loc.s_port = *(unsigned short *)(message + sizeof(server_identifier));
+	loc.prior_id = next_prior_id;
+	loc.locationInfo.s_id = *(server_identifier*) message;
+	loc.locationInfo.s_port = *(unsigned short *)(message + sizeof(server_identifier));
 	
 	char *p = message + sizeof(server_identifier) + sizeof(unsigned short);
 
 	// read procedure name
-	strncpy(proc.name, p, MAX_PROC_NAME_SIZE);
-	proc.name[MAX_PROC_NAME_SIZE] = '\0';
+	strncpy(proc.procInfo.proc_name, p, MAX_PROC_NAME_SIZE);
+	proc.procInfo.proc_name[MAX_PROC_NAME_SIZE] = '\0';
+
 	p += (MAX_PROC_NAME_SIZE + 1);
  	
  	// find length of argTypes
-    int argLen = (msg_len - sizeof(server_identifier) - sizeof(unsigned short) - (MAX_PROC_NAME_SIZE + 1)) / 4;
-	proc.argTypes = new int[argLen];
+    int argLen = *(int*) p; 			//(msg_len - sizeof(server_identifier) - sizeof(unsigned short) - (MAX_PROC_NAME_SIZE + 1)) / 4;
+    proc.procInfo.argLen = argLen;
+	proc.procInfo.argTypes = new int[argLen+1];
 
 	// read argTypes
-    for(int i = 0; i < argLen; i++){
-    	proc.argTypes[i] = *(int*)p;
-    	p += 4;
-    }
+	p += sizeof(int);
+	memcpy(proc.procInfo.argTypes, p, (argLen+1)*sizeof(int));
 
-    // this server has already registered this procedure, 
+    map<ProcSignature, set<ProcLocation> >::iterator map_it;
+    map_it = sig_to_location.find(proc);
+
+    // if this server has already registered this procedure, 
     // override the previous procedure
-    if(is_registered(proc, loc)){
-
+    // otherwise, add this server to procedure location set 
+    if(map_it != sig_to_location.end()){
+    	map_it->second.insert(loc);
+    	
+    }else{
+    	// no such entry is found, add new one to database
+   		set<ProcLocation> loc_set;
+   		loc_set.insert(loc); 
+    	sig_to_location.insert(pair<ProcSignature, set<ProcLocation> >(proc, loc_set));
     }
+
+    next_prior_id++;
 
 }
 
@@ -137,7 +216,7 @@ void Binder::proc_registration(int msg_len, char * message){
 void Binder::terminateServers(){
 	int type = (int) TERMINATE;
 	while(!server_queue.empty()){
-		int status = send(server_queue.front().s_port, &type, sizeof(type), 0);
+		int status = send(server_queue.front().locationInfo.s_port, &type, sizeof(type), 0);
 		server_queue.pop();
 		if(status < 0){
 			// cerr << "ERROR: on terminating servers"<< endl; 			//	??????? 
@@ -149,7 +228,7 @@ void Binder::terminateServers(){
 
 // create socket, then bind binder_addr to socket
 // then listen for socket connections
-void Binder::create_binder(){
+void Binder::setup_socket(){
     sockaddr_in binder_sockaddr, sock_in;
     int status;
     int len = sizeof(sockaddr_in);
@@ -193,7 +272,7 @@ void Binder::start(){
     int len = sizeof(sockaddr_in);
     bool stop = false;
 
-    create_binder();
+    setup_socket();
 
     // save socket of each connection in this vector
     vector<int> connections;
@@ -269,6 +348,8 @@ void Binder::start(){
 }
 
 
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
 int main(int argc, const char * argv[]) {

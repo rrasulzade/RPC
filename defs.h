@@ -54,6 +54,7 @@ typedef struct {
 // FOR Binder
 typedef struct {
 	char proc_name [MAX_PROC_NAME_SIZE+1];	// NULL terminated
+	unsigned int argLen;
 	int *argTypes;							// NULL terminated
 } proc_sig;
 
