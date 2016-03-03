@@ -14,7 +14,9 @@
 #include <netdb.h>
 
 #include "binder.h"
-#include "rpc.h"
+
+#include "debug.h"
+
 
 
 using namespace std;
@@ -22,7 +24,7 @@ using namespace std;
 
 // converts the first letter of each word in the text to uppercase
 void capitalize(char* text) {
-    for (int i = 0; i < strlen(text); i++) {
+    for (unsigned int i = 0; i < strlen(text); i++) {
         if (i == 0 || text[i-1] == ' ' || text[i-1] == '\t') {
             text[i] = toupper(text[i]);
         } else {
@@ -277,7 +279,7 @@ void Binder::proc_registration(int msg_len, char * message){
 	   		loc_set.insert(loc); 
 	    	sig_to_location.insert(pair<ProcSignature, set<ProcLocation> >(proc, loc_set));
 
-	    	debug("Add new entry");
+	    	debug("Add new entry");	    		
 	    }
 
 
@@ -374,7 +376,7 @@ void Binder::start(){
         fd_set readfds;
 	    FD_ZERO(&readfds);
 	    int max_fd = binder_sockFD;
-	    for(int i=0; i < connections.size(); i++){
+	    for(unsigned int i=0; i < connections.size(); i++){
 	    	FD_SET(connections[i], &readfds);
 	    	if(connections[i] > max_fd)
 	    		max_fd = connections[i];
@@ -394,7 +396,7 @@ void Binder::start(){
         }
 
         // check all existing connections
-        for(int i = 0; i < connections.size(); i++){
+        for(unsigned int i = 0; i < connections.size(); i++){
             // there is an incoming connection
             if(FD_ISSET(connections[i], &readfds)){
 
@@ -455,10 +457,12 @@ void Binder::printMap(){
 	debug("print");
 	map<ProcSignature, set<ProcLocation> >::iterator map_it = sig_to_location.begin();
 	for(; map_it != sig_to_location.end(); map_it++){
-		cout << map_it->first.procInfo.proc_name << " -> ";
+		cout << map_it->first.procInfo.proc_name <<  map_it->first.procInfo.argLen <<" -> " << endl;
 		set<ProcLocation>:: iterator set_it = map_it->second.begin();
 		for(; set_it != map_it->second.end(); set_it++){
-			cout << set_it->locationInfo.s_id.addr.hostname << " ";
+			cout << set_it->locationInfo.s_id.addr.hostname << endl;
+			cout << set_it->prior_id << endl;
+	    	cout << set_it->locationInfo.s_port << endl;
 		}
 		cout << endl;
 	}
@@ -470,6 +474,7 @@ int main(int argc, const char * argv[]) {
     Binder binder;
   	
   	proc_sig f;
+  	memset(&f, 0, sizeof(proc_sig));
   	char nameF[] = "f";
   	strncpy(f.proc_name, nameF, MAX_PROC_NAME_SIZE);
   	f.proc_name[MAX_PROC_NAME_SIZE] = '\0';
@@ -482,6 +487,7 @@ int main(int argc, const char * argv[]) {
 
 
   	proc_sig g;
+  	memset(&g, 0, sizeof(proc_sig));
   	char nameG[] = "g";
   	strncpy(g.proc_name, nameG, MAX_PROC_NAME_SIZE);
   	g.proc_name[MAX_PROC_NAME_SIZE] = '\0';
@@ -495,6 +501,7 @@ int main(int argc, const char * argv[]) {
 
 
   	proc_sig h;
+  	memset(&h, 0, sizeof(proc_sig));
   	char nameH[] = "h";
   	strncpy(h.proc_name, nameH, MAX_PROC_NAME_SIZE);
   	h.proc_name[MAX_PROC_NAME_SIZE] = '\0';
@@ -507,6 +514,7 @@ int main(int argc, const char * argv[]) {
 
 
   	location serverA;
+  	memset(&serverA, 0, sizeof(location));
   	serverA.s_port = 555;
   	serverA.s_id.addr_type = ADDR_TYPE_HOSTNAME;
   	strncpy(serverA.s_id.addr.hostname, "serverA-002-RR", MAX_HOSTNAME_SIZE);
@@ -514,6 +522,7 @@ int main(int argc, const char * argv[]) {
 
 
   	location serverB;
+  	memset(&serverB, 0, sizeof(location));
   	serverB.s_port = 444;
   	serverB.s_id.addr_type = ADDR_TYPE_HOSTNAME;
   	strncpy(serverB.s_id.addr.hostname, "serverB-002-RR", MAX_HOSTNAME_SIZE);
@@ -521,23 +530,53 @@ int main(int argc, const char * argv[]) {
 
 
   	location serverC;
+  	memset(&serverC, 0, sizeof(location));
   	serverC.s_port = 333;
   	serverC.s_id.addr_type = ADDR_TYPE_HOSTNAME;
   	strncpy(serverC.s_id.addr.hostname, "serverC-002-RR", MAX_HOSTNAME_SIZE);
   	serverC.s_id.addr.hostname[MAX_HOSTNAME_SIZE] = '\0';
 
 
+  	///////////////////   F  //////////////////////////////////
   	int requestLen = sizeof(location) + sizeof(proc_sig);
-  	char *request1 = new char[requestLen];
-
+  	char request1[requestLen+1];
   	memcpy(request1, &serverA, sizeof(location));
-  	request1 += sizeof(location);
-
-  	memcpy(request1, &f, sizeof(proc_sig));
+  	memcpy(request1 + sizeof(location), &f, sizeof(proc_sig));
+  	request1[requestLen] = '\0';
 
   	binder.proc_registration(requestLen, request1);
 
+
+  	char request2[requestLen+1];
+  	memcpy(request2, &serverB, sizeof(location));
+  	memcpy(request2 +sizeof(location), &f, sizeof(proc_sig));
+  	request2[requestLen] = '\0';
+
+  	binder.proc_registration(requestLen, request2);
+
+
+  	///////////////////   G  //////////////////////////////////
+
+  	// char request3[requestLen+1];
+  	// memcpy(request3, &serverB, sizeof(location));
+  	// memcpy(request3 +sizeof(location), &g, sizeof(proc_sig));
+  	// request3[requestLen] = '\0';
+
+  	// binder.proc_registration(requestLen, request3);
+
+
+  	// char request4[requestLen+1];
+  	// memcpy(request4, &serverC, sizeof(location));
+  	// memcpy(request4 +sizeof(location), &g, sizeof(proc_sig));
+  	// request4[requestLen] = '\0';
+
+  	// binder.proc_registration(requestLen, request4);
+
+
+
   	binder.printMap();
 
+
+  	// delete [] request1;
     return 0;
 }

@@ -3,7 +3,7 @@ AR			=	ar
 ARFLAGS		=	rcs
 CFLAGS		=	-c -Wall -g
 CXX			=	g++
-CXXFLAGS	=	-Wall -MMD -g
+CXXFLAGS	=	-Wall -MMD -g -DDEBUGCALL
 
 
 
@@ -38,7 +38,7 @@ ${RPCOBJECT} : ${RPCSRC}
 	${XCC} ${CFLAGS} ${RPCSRC} -o ${RPCOBJECT}
 
 ${BINDEREXEC} : ${BINDERSRC}
-	${CXX} ${CXXFLAGS} $^ -o $@
+	${CXX} ${CXXFLAGS} $< -o $@
 
 
 ${OBJECTS} : ${MAKEFILE_NAME}					# OPTIONAL : changes to this file => recompile
