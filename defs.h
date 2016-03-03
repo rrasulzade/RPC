@@ -11,7 +11,6 @@
 #define		ADDR_TYPE_IP			0
 #define		ADDR_TYPE_HOSTNAME		1
 
-#define 	debug(msg, ...) 		printf("DEBUG %s \n", msg);
 
 
 
