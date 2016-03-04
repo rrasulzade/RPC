@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iomanip> 
 #include <string>
 #include <vector>
 
@@ -46,30 +47,41 @@ int representInDecimal(unsigned char *buf){
 
 bool operator==(const ProcSignature& lhs, const ProcSignature& rhs) {
 	int str_compare = strcmp(lhs.procInfo.proc_name, rhs.procInfo.proc_name);
-	if(str_compare != 0 || lhs.procInfo.argLen != rhs.procInfo.argLen){
+
+	// cout << "==Sig==1 " << lhs.procInfo.proc_name << " " << rhs.procInfo.proc_name << endl;
+
+	if(str_compare != 0) {
 		return false;
-	}else{
-		// for (int i = 0; i < lhs.procInfo.argLen; ++i){
-			if(memcmp(lhs.procInfo.argTypes, rhs.procInfo.argTypes, (lhs.procInfo.argLen+1)*sizeof(int)) != 0){
-				return false;
-			}
-		// }
 	}
+	if(str_compare == 0){
+		if(lhs.procInfo.argLen != rhs.procInfo.argLen || 
+		   	(lhs.procInfo.argLen == rhs.procInfo.argLen && 
+			memcmp(lhs.procInfo.argTypes, rhs.procInfo.argTypes, (lhs.procInfo.argLen+1)*sizeof(int)) != 0) )
+			return false;
+
+	}
+
 	return true;
 }
 
 
 bool operator< (const ProcSignature& lhs, const ProcSignature& rhs){
 	int str_compare = strcmp(lhs.procInfo.proc_name, rhs.procInfo.proc_name);
-	if(str_compare >= 0 || lhs.procInfo.argLen != rhs.procInfo.argLen){
+
+	// cout << "==Sig==2 " << str_compare << " " <<  lhs.procInfo.proc_name << " " << rhs.procInfo.proc_name << endl;
+
+	if(str_compare > 0) {
 		return false;
-	}else{
-		// for (int i = 0; i < lhs.procInfo.argLen; ++i){
-			if(memcmp(lhs.procInfo.argTypes, rhs.procInfo.argTypes, (lhs.procInfo.argLen+1)*sizeof(int)) >= 0){
-				return false;
-			}
-		// }
 	}
+	if(str_compare == 0){
+		if(lhs.procInfo.argLen > rhs.procInfo.argLen || 
+		   	(lhs.procInfo.argLen == rhs.procInfo.argLen && 
+			memcmp(lhs.procInfo.argTypes, rhs.procInfo.argTypes, (lhs.procInfo.argLen+1)*sizeof(int)) >= 0) ){
+				return false;
+		}
+
+	}
+
 	return true;
 }
 
@@ -78,7 +90,10 @@ bool operator< (const ProcSignature& lhs, const ProcSignature& rhs){
 
 
 bool operator==(const ProcLocation& lhs, const ProcLocation& rhs){
-	if(lhs.prior_id != rhs.prior_id){
+	// cout << "==Loc==1 " << lhs.locationInfo.s_id.addr.hostname << ":" << lhs.locationInfo.s_port 
+	     // << "  " << rhs.locationInfo.s_id.addr.hostname << ":" << rhs.locationInfo.s_port << endl;
+
+	if(lhs.locationInfo.s_port != rhs.locationInfo.s_port){
 		return false;
 	}
 	return true;
@@ -86,6 +101,10 @@ bool operator==(const ProcLocation& lhs, const ProcLocation& rhs){
 
 
 bool operator< (const ProcLocation& lhs, const ProcLocation& rhs){
+
+	// cout << "==Loc==2 " << lhs.locationInfo.s_id.addr.hostname << " " << rhs.locationInfo.s_id.addr.hostname << endl;
+
+
 	if(lhs.prior_id >= rhs.prior_id){
 		return false;
 	}
@@ -174,7 +193,7 @@ void Binder::proc_location_request(int msg_len, char * message){
 	strncpy(proc.procInfo.proc_name, message, MAX_PROC_NAME_SIZE);
 	proc.procInfo.proc_name[MAX_PROC_NAME_SIZE] = '\0';
 
-	message += (MAX_PROC_NAME_SIZE + 1);
+	message += MAX_PROC_NAME_SIZE;
 
 	// find length of argTypes
     int argLen = *(int*) message; 
@@ -231,16 +250,17 @@ void Binder::proc_registration(int msg_len, char * message){
 
 	// read server identifier and server port
 	loc.prior_id = next_prior_id;
-	loc.locationInfo.s_id = *(server_identifier*) message;
-	loc.locationInfo.s_port = *(unsigned short *)(message + sizeof(server_identifier));
-	
-	char *p = message + sizeof(server_identifier) + sizeof(unsigned short);
+	memcpy(&loc.locationInfo, message, sizeof(location));
+
+	char *p = message + sizeof(location); //sizeof(server_identifier) + sizeof(unsigned short);
 
 	// read procedure name
 	strncpy(proc.procInfo.proc_name, p, MAX_PROC_NAME_SIZE);
 	proc.procInfo.proc_name[MAX_PROC_NAME_SIZE] = '\0';
 
-	p += (MAX_PROC_NAME_SIZE + 1);
+	// debug(proc.procInfo.proc_name);
+
+	p += MAX_PROC_NAME_SIZE;
  	
  	// find length of argTypes
     int argLen = *(int*) p; 
@@ -251,20 +271,34 @@ void Binder::proc_registration(int msg_len, char * message){
 	p += sizeof(int);
 	memcpy(proc.procInfo.argTypes, p, (argLen+1)*sizeof(int));
 
+	// if any of the argTypes contains array length, change that length to 1
+	// to indicate that this argType requires array
+	// otherwise, length is 0 for scalar paramaters 
+	for(int i = 0; i < proc.procInfo.argLen; i++){
+		if((proc.procInfo.argTypes[i] & 0x0000ffff) > 0)
+			proc.procInfo.argTypes[i] = (proc.procInfo.argTypes[i] & 0xffff0000) + 0x00000001;
+	}
+
     map<ProcSignature, set<ProcLocation> >::iterator map_it;
     map_it = sig_to_location.find(proc);
 
-    debug("Data Parsed");
+    // debug("Data Parsed");
 
     // if this server has already registered this procedure, 
     // override the previous procedure
     // otherwise, add this server to procedure location set
     try{ 
 	    if(map_it != sig_to_location.end()){
+	    	
+	    	// debug("Already registered");	    
+
 	    	set<ProcLocation>::iterator set_it = map_it->second.begin();
 	    	for(; set_it != map_it->second.end(); set_it++){
-	    		ProcLocation tmp = *set_it;
-	    		if (memcmp(&loc, &tmp, sizeof(ProcLocation)) == 0){
+	    		// ProcLocation tmp;
+	    		// memset(&tmp, 0, sizeof(ProcLocation));
+	    		// tmp = *set_it;
+
+	    		if (loc == *set_it){
 	    			throw failure();
 	    		}
 	    	}
@@ -272,6 +306,7 @@ void Binder::proc_registration(int msg_len, char * message){
 	    	if(set_it == map_it->second.end()){
 	    		map_it->second.insert(loc);
 	    		addToServerQueue(map_it->second);
+	    		// debug("New server added to set");
 	    	}
 	    }else{
 	    	// no such entry is found, add new one to database
@@ -279,14 +314,14 @@ void Binder::proc_registration(int msg_len, char * message){
 	   		loc_set.insert(loc); 
 	    	sig_to_location.insert(pair<ProcSignature, set<ProcLocation> >(proc, loc_set));
 
-	    	debug("Add new entry");	    		
+	    	// debug("Add new entry");	    		
 	    }
 
 
 	    next_prior_id++;
 	    // send SUCCESS  <msg_type + msg_size + REGISTER_SUCCESS >
 	}catch(failure& e){
-		// send FAILURE  <msg_type + msg_size + REGISTER_FAILURE >
+		cout << "send FAILURE  <msg_type + msg_size + REGISTER_FAILURE >" << endl;
 	}
 }
 
@@ -454,15 +489,15 @@ void Binder::start(){
 
 
 void Binder::printMap(){
-	debug("print");
+	// debug("print");
 	map<ProcSignature, set<ProcLocation> >::iterator map_it = sig_to_location.begin();
 	for(; map_it != sig_to_location.end(); map_it++){
-		cout << map_it->first.procInfo.proc_name <<  map_it->first.procInfo.argLen <<" -> " << endl;
+		cout << map_it->first.procInfo.proc_name <<  " Arglen: " <<  map_it->first.procInfo.argLen <<" -> " << endl;
 		set<ProcLocation>:: iterator set_it = map_it->second.begin();
 		for(; set_it != map_it->second.end(); set_it++){
-			cout << set_it->locationInfo.s_id.addr.hostname << endl;
-			cout << set_it->prior_id << endl;
-	    	cout << set_it->locationInfo.s_port << endl;
+			cout << setfill(' ') << setw(3) <<  set_it->prior_id << " "
+				 << set_it->locationInfo.s_id.addr.hostname << " "			
+	    	     << set_it->locationInfo.s_port << endl;
 		}
 		cout << endl;
 	}
@@ -484,7 +519,8 @@ int main(int argc, const char * argv[]) {
   	f.argTypes[0] = (1 << ARG_OUTPUT) | (ARG_INT << 16);           
     f.argTypes[1] = (1 << ARG_INPUT)  | (ARG_INT << 16) | 10;
     f.argTypes[2] = 0; 
-
+          
+    
 
   	proc_sig g;
   	memset(&g, 0, sizeof(proc_sig));
@@ -512,6 +548,23 @@ int main(int argc, const char * argv[]) {
   	h.argTypes[1] = 0;
 
 
+  	proc_sig z;
+  	memset(&z, 0, sizeof(proc_sig));
+  	char nameZ[] = "z";
+  	strncpy(z.proc_name, nameZ, MAX_PROC_NAME_SIZE);
+  	z.proc_name[MAX_PROC_NAME_SIZE] = '\0';
+  	z.argLen = 5;
+  	z.argTypes = new int[z.argLen+1];
+
+  	z.argTypes[0] = (1 << ARG_OUTPUT) | (ARG_LONG << 16) | 11;
+  	z.argTypes[1] = (1 << ARG_INPUT) | (ARG_INT << 16);
+  	z.argTypes[2] =	(1 << ARG_INPUT) | (ARG_CHAR << 16); 
+  	z.argTypes[3] =	(1 << ARG_INPUT) | (ARG_CHAR << 16) | 22;
+  	z.argTypes[4] = 0;
+
+
+  	///////////////////////////////   SERVERS  //////////////////////////////////
+
 
   	location serverA;
   	memset(&serverA, 0, sizeof(location));
@@ -536,47 +589,143 @@ int main(int argc, const char * argv[]) {
   	strncpy(serverC.s_id.addr.hostname, "serverC-002-RR", MAX_HOSTNAME_SIZE);
   	serverC.s_id.addr.hostname[MAX_HOSTNAME_SIZE] = '\0';
 
+  	location serverD;
+  	memset(&serverD, 0, sizeof(location));
+  	serverD.s_port = 222;
+  	serverD.s_id.addr_type = ADDR_TYPE_HOSTNAME;
+  	strncpy(serverD.s_id.addr.hostname, "serverD-002-RR", MAX_HOSTNAME_SIZE);
+  	serverD.s_id.addr.hostname[MAX_HOSTNAME_SIZE] = '\0';
+
+
+  	location serverE;
+  	memset(&serverE, 0, sizeof(location));
+  	serverE.s_port = 111;
+  	serverE.s_id.addr_type = ADDR_TYPE_HOSTNAME;
+  	strncpy(serverE.s_id.addr.hostname, "serverE-002-RR", MAX_HOSTNAME_SIZE);
+  	serverE.s_id.addr.hostname[MAX_HOSTNAME_SIZE] = '\0';
+
 
   	///////////////////   F  //////////////////////////////////
+
   	int requestLen = sizeof(location) + sizeof(proc_sig);
-  	char request1[requestLen+1];
-  	memcpy(request1, &serverA, sizeof(location));
-  	memcpy(request1 + sizeof(location), &f, sizeof(proc_sig));
-  	request1[requestLen] = '\0';
+  	char requestF1[requestLen+1];
+  	memcpy(requestF1, &serverA, sizeof(location));
+  	
+  	memcpy(requestF1 + sizeof(location), f.proc_name, MAX_PROC_NAME_SIZE);
+  	memcpy(requestF1 + sizeof(location) + MAX_PROC_NAME_SIZE, &f.argLen, sizeof(unsigned int));
+  	memcpy(requestF1 + sizeof(location) + MAX_PROC_NAME_SIZE + sizeof(unsigned int), f.argTypes, (f.argLen+1)*sizeof(int));
+  	
+  	requestF1[requestLen] = '\0';
 
-  	binder.proc_registration(requestLen, request1);
+  	binder.proc_registration(requestLen, requestF1);
 
 
-  	char request2[requestLen+1];
-  	memcpy(request2, &serverB, sizeof(location));
-  	memcpy(request2 +sizeof(location), &f, sizeof(proc_sig));
-  	request2[requestLen] = '\0';
+  	char requestF2[requestLen+1];
+  	memcpy(requestF2, &serverD, sizeof(location));
 
-  	binder.proc_registration(requestLen, request2);
+  	memcpy(requestF2 + sizeof(location), f.proc_name, MAX_PROC_NAME_SIZE);
+  	memcpy(requestF2 + sizeof(location) + MAX_PROC_NAME_SIZE, &f.argLen, sizeof(unsigned int));
+  	memcpy(requestF2 + sizeof(location) + MAX_PROC_NAME_SIZE + sizeof(unsigned int), f.argTypes, (f.argLen+1)*sizeof(int));
+  	
+  	requestF2[requestLen] = '\0';
+
+  	binder.proc_registration(requestLen, requestF2);
+
 
 
   	///////////////////   G  //////////////////////////////////
 
-  	// char request3[requestLen+1];
-  	// memcpy(request3, &serverB, sizeof(location));
-  	// memcpy(request3 +sizeof(location), &g, sizeof(proc_sig));
-  	// request3[requestLen] = '\0';
+  	char requestG1[requestLen+1];
+  	memcpy(requestG1, &serverA, sizeof(location));
+  	
+  	memcpy(requestG1 + sizeof(location), g.proc_name, MAX_PROC_NAME_SIZE);
+  	memcpy(requestG1 + sizeof(location) + MAX_PROC_NAME_SIZE, &g.argLen, sizeof(unsigned int));
+  	memcpy(requestG1 + sizeof(location) + MAX_PROC_NAME_SIZE + sizeof(unsigned int), g.argTypes, (g.argLen+1)*sizeof(int));
+  	requestG1[requestLen] = '\0';
 
-  	// binder.proc_registration(requestLen, request3);
-
-
-  	// char request4[requestLen+1];
-  	// memcpy(request4, &serverC, sizeof(location));
-  	// memcpy(request4 +sizeof(location), &g, sizeof(proc_sig));
-  	// request4[requestLen] = '\0';
-
-  	// binder.proc_registration(requestLen, request4);
+  	binder.proc_registration(requestLen, requestG1);
 
 
+  	char requestG2[requestLen+1];
+  	memcpy(requestG2, &serverB, sizeof(location));
+  	
+  	memcpy(requestG2 + sizeof(location), g.proc_name, MAX_PROC_NAME_SIZE);
+  	memcpy(requestG2 + sizeof(location) + MAX_PROC_NAME_SIZE, &g.argLen, sizeof(unsigned int));
+  	memcpy(requestG2 + sizeof(location) + MAX_PROC_NAME_SIZE + sizeof(unsigned int), g.argTypes, (g.argLen+1)*sizeof(int));
+  	requestG2[requestLen] = '\0';
+
+  	binder.proc_registration(requestLen, requestG2);
+
+
+  	char requestG3[requestLen+1];
+  	memcpy(requestG3, &serverD, sizeof(location));
+
+  	memcpy(requestG3 + sizeof(location), g.proc_name, MAX_PROC_NAME_SIZE);
+  	memcpy(requestG3 + sizeof(location) + MAX_PROC_NAME_SIZE, &g.argLen, sizeof(unsigned int));
+  	memcpy(requestG3 + sizeof(location) + MAX_PROC_NAME_SIZE + sizeof(unsigned int), g.argTypes, (g.argLen+1)*sizeof(int));
+  	requestG3[requestLen] = '\0';
+
+  	binder.proc_registration(requestLen, requestG3);
+
+
+  	///////////////////   H  //////////////////////////////////
+
+  	char requestH1[requestLen+1];
+  	memcpy(requestH1, &serverA, sizeof(location));
+
+  	memcpy(requestH1 + sizeof(location), h.proc_name, MAX_PROC_NAME_SIZE);
+  	memcpy(requestH1 + sizeof(location) + MAX_PROC_NAME_SIZE, &h.argLen, sizeof(unsigned int));
+  	memcpy(requestH1 + sizeof(location) + MAX_PROC_NAME_SIZE + sizeof(unsigned int), h.argTypes, (h.argLen+1)*sizeof(int));
+  	requestH1[requestLen] = '\0';
+
+  	binder.proc_registration(requestLen, requestH1);
+
+
+  	char requestH2[requestLen+1];
+  	memcpy(requestH2, &serverB, sizeof(location));
+
+  	memcpy(requestH2 + sizeof(location), h.proc_name, MAX_PROC_NAME_SIZE);
+  	memcpy(requestH2 + sizeof(location) + MAX_PROC_NAME_SIZE, &h.argLen, sizeof(unsigned int));
+  	memcpy(requestH2 + sizeof(location) + MAX_PROC_NAME_SIZE + sizeof(unsigned int), h.argTypes, (h.argLen+1)*sizeof(int));
+  	requestH2[requestLen] = '\0';
+
+	binder.proc_registration(requestLen, requestH2);
+
+
+	char requestH3[requestLen+1];
+  	memcpy(requestH3, &serverC, sizeof(location));
+
+  	memcpy(requestH3 + sizeof(location), h.proc_name, MAX_PROC_NAME_SIZE);
+  	memcpy(requestH3 + sizeof(location) + MAX_PROC_NAME_SIZE, &h.argLen, sizeof(unsigned int));
+  	memcpy(requestH3 + sizeof(location) + MAX_PROC_NAME_SIZE + sizeof(unsigned int), h.argTypes, (h.argLen+1)*sizeof(int));
+  	requestH3[requestLen] = '\0';
+
+  	binder.proc_registration(requestLen, requestH3);
+
+
+  	///////////////////   Z  //////////////////////////////////
+
+  	char requestZ1[requestLen+1];
+  	memcpy(requestZ1, &serverE, sizeof(location));
+
+  	memcpy(requestZ1 + sizeof(location), z.proc_name, MAX_PROC_NAME_SIZE);
+  	memcpy(requestZ1 + sizeof(location) + MAX_PROC_NAME_SIZE, &z.argLen, sizeof(unsigned int));
+  	memcpy(requestZ1 + sizeof(location) + MAX_PROC_NAME_SIZE + sizeof(unsigned int), z.argTypes, (z.argLen+1)*sizeof(int));
+  	requestZ1[requestLen] = '\0';
+
+  	binder.proc_registration(requestLen, requestZ1);
+
+
+
+
+  	cout << "//////////////// REGISTRATION ////////////////\n" << endl;
 
   	binder.printMap();
+  	cout << "//////////////// END ////////////////\n" << endl;
 
 
+
+  	
   	// delete [] request1;
     return 0;
 }
