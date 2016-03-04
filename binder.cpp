@@ -205,7 +205,7 @@ void Binder::proc_location_request(int msg_len, char * message){
 	memcpy(proc.procInfo.argTypes, message, (argLen+1)*sizeof(int));
 
 	// change array length to 1 to indicate that this parameter is an array
-	for(int i = 0; i < proc.procInfo.argLen; i++){
+	for(unsigned int i = 0; i < proc.procInfo.argLen; i++){
 		if((proc.procInfo.argTypes[i] & 0x0000ffff) > 0)
 			proc.procInfo.argTypes[i] = (proc.procInfo.argTypes[i] & 0xffff0000) + 0x00000001;
 	}
@@ -286,7 +286,7 @@ void Binder::proc_registration(int msg_len, char * message){
 	// if any of the argTypes contains array length, change that length to 1
 	// to indicate that this argType requires array
 	// otherwise, length is 0 for scalar paramaters 
-	for(int i = 0; i < proc.procInfo.argLen; i++){
+	for(unsigned int i = 0; i < proc.procInfo.argLen; i++){
 		if((proc.procInfo.argTypes[i] & 0x0000ffff) > 0)
 			proc.procInfo.argTypes[i] = (proc.procInfo.argTypes[i] & 0xffff0000) + 0x00000001;
 	}
