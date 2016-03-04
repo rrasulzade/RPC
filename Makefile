@@ -38,7 +38,7 @@ ${RPCOBJECT} : ${RPCSRC}
 	${XCC} ${CFLAGS} ${RPCSRC} -o ${RPCOBJECT}
 
 ${BINDEREXEC} : ${BINDERSRC}
-	${CXX} ${CXXFLAGS} $< -o $@
+	${CXX} ${CXXFLAGS} binder.cpp BinderSample.cpp -o $@
 
 
 ${OBJECTS} : ${MAKEFILE_NAME}					# OPTIONAL : changes to this file => recompile

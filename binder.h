@@ -37,7 +37,6 @@ struct ProcSignature{
 
 
 struct ProcLocation{
-	unsigned long prior_id;
 	location locationInfo;
 
 	friend bool operator< (const ProcLocation& lhs, const ProcLocation& rhs);
@@ -48,7 +47,7 @@ struct ProcLocation{
 
 class Binder{
 	int binder_sockFD;
-	std::map<ProcSignature, std::set<ProcLocation> > sig_to_location;
+	std::map<ProcSignature, std::list<ProcLocation> > sig_to_location;
 	std::list<ProcLocation> server_queue;
 	unsigned int next_prior_id;
 
@@ -62,11 +61,13 @@ class Binder{
   	int handle_message(int sockFD);
   	void proc_registration(int msg_len, char * message);
   	void proc_location_request(int msg_len, char * message);
-  	ProcLocation roundRobinServer(std::set<ProcLocation>& loc_set);
-  	void addToServerQueue(std::set<ProcLocation>& loc_set);
+  	ProcLocation roundRobinServer(std::list<ProcLocation>& loc_set);
+  	void addToServerQueue(std::list<ProcLocation>& loc_set);
+  	void addToServerQueue(ProcLocation& loc);
   	void terminateServers();
 
 
+  	void printList();
   	void printMap();
 
 };
