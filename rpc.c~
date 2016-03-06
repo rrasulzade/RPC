@@ -764,6 +764,7 @@ int rpcCall(char* name, int* argTypes, void** args) {
 		return ret;
 	}
 	
+	
 	ret = send_request (&server_sock, msg, total_msg_len);
 	if (ret != ERR_RPC_SUCCESS) {
 		free(arg_sizes);

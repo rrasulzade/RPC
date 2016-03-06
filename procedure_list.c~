@@ -1,0 +1,89 @@
+#include <stdlib.h>
+#include <string.h>
+#include "procedure_list.h"
+
+
+
+/*
+typedef int (*skel)(int *, void **);
+
+
+struct proc_node {
+	proc_sig sig;
+	skel f;
+	struct proc_node *next;
+};
+*/
+
+struct proc_node *head;
+
+
+// returns 0 on success, 1 when fails
+int insert (proc_sig *sig, skel f){
+	// create a new node
+	struct proc_node *newnode = malloc(sizeof(struct proc_node));
+	if (newnode == NULL) return ERR_LIST_ERROR;
+	memset (newnode, 0, sizeof(struct proc_node));
+	memcpy(&(newnode->sig), sig, sizeof(proc_sig));
+	newnode->f = f;
+	
+	// insert to the front
+	newnode->next = head;
+	head = newnode;
+	
+	return ERR_LIST_SUCCESS;
+}
+
+
+// returns 0 on success, 1 when fails
+int insert_back (proc_sig *sig, skel f){
+	// create a new node
+	struct proc_node *newnode = malloc(sizeof(struct proc_node));
+	if (newnode == NULL) return ERR_LIST_ERROR;
+	memset (newnode, 0, sizeof(struct proc_node));
+	memcpy(&(newnode->sig), sig, sizeof(proc_sig));
+	newnode->f = f;
+	
+	// no element => return the element itself
+	if (head == NULL) {
+		head = newnode;
+	}
+	// insert to the end
+	else {
+		struct proc_node *cur = head;
+		while (cur->next != NULL) cur = cur->next;
+		cur->next = newnode;
+	}
+	
+	return ERR_LIST_SUCCESS;
+}
+
+// returns NULL if not found, struct proc_node* otherwise.
+struct proc_node *find (proc_sig *sig, skel f){
+	for (struct proc_node *cur = head; cur != NULL; cur = cur->next) {
+		if (!memcmp (&cur->sig, sig, sizeof(proc_sig)) && cur->f == f) {
+			return cur;
+		}
+	}
+	return NULL;
+}
+
+int update (proc_sig *sig, skel f) {
+	for (struct proc_node *cur = head; cur != NULL; cur = cur->next) {
+		if (!memcmp (&cur->sig, sig, sizeof(proc_sig)) && cur->f == f) {
+			memcpy (&cur->sig, sig, sizeof(proc_sig));
+			cur->f = f;
+			return ERR_LIST_UPDATED;
+		}
+	}
+	return insert (sig, f);
+}
+
+
+
+int main () {
+	
+	
+	
+	return 0;
+}
