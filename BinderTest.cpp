@@ -375,6 +375,9 @@ int main(int argc, const char * argv[]) {
   	binder.proc_location_request(requestLen, requestZZ3);
 
 
-  	// delete [] request1;
+  	    delete [] f.argTypes;
+    delete [] g.argTypes;
+    delete [] h.argTypes;
+    delete [] z.argTypes;
     return 0;
 }

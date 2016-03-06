@@ -134,19 +134,19 @@ Binder::~Binder(void){
 
 // receive message, 
 int Binder::handle_message(int sockFD){
-    int msg_len;
+    unsigned int msg_len;
     int msg_type;
     char *msg;
 
-    // msg_type = *(int*)(msg+4);
+   
 
-    int status = recv(sockFD, &msg_len, sizeof(int), 0);
+    int status = recv(sockFD, &msg_len, sizeof(msg_len), 0);
     if(status < 0){
     	cerr << "ERROR: on receiving message length" << endl;
     	return status;
    	}
 
-   	status = recv(sockFD, &msg_type, sizeof(int), 0);
+   	status = recv(sockFD, &msg_type, sizeof(msg_type), 0);
    	if(status < 0){
     	cerr << "ERROR: on receiving message type" << endl;
     	return status;
@@ -160,6 +160,8 @@ int Binder::handle_message(int sockFD){
    	}
    	msg[msg_len] = '\0';   // already null terminated ???
 
+   	 // msg_type = *(int*)(msg);
+
     // connection is closed
    	if(status == 0){
    		delete msg;
@@ -169,10 +171,10 @@ int Binder::handle_message(int sockFD){
    	
    	switch(msg_type){
    		case REGISTER:
-   			proc_registration(msg_len, msg);
+   			proc_registration(sockFD, msg);
    			break;
    		case LOC_REQUEST:
-   			proc_location_request(msg_len, msg);
+   			proc_location_request(sockFD, msg);
    			break;
    		case TERMINATE:
    			terminateServers();
@@ -186,7 +188,45 @@ int Binder::handle_message(int sockFD){
 
 
 
-void Binder::proc_location_request(int msg_len, char * message){
+int Binder::sendLOC(int sockFD, msg_type type, ProcLocation* loc, int* retCode){
+	int status = 0;
+    unsigned int msg_len = sizeof(type);
+
+    if(type == LOC_SUCCESS && loc != NULL){
+        msg_len += sizeof(ProcLocation);
+		char msg[msg_len+1];
+		memcpy(msg, &type, sizeof(type));
+		memcpy(msg+sizeof(type), loc, sizeof(ProcLocation));
+		msg[msg_len] = '\0';
+		status = send(sockFD, msg, msg_len, 0);
+    }else{
+		msg_len += sizeof(int);
+		char msg[msg_len+1];
+		memcpy(msg, &type, sizeof(type));
+		memcpy(msg+sizeof(type), retCode, sizeof(int));
+		msg[msg_len] = '\0';
+		status = send(sockFD, msg, msg_len, 0);
+    }
+
+    return status;
+}
+
+
+int Binder::sendREGISTER(int sockFD, msg_type type, int& retCode){
+	unsigned int msg_len = sizeof(type) + sizeof(retCode);
+	char msg[msg_len+1];
+
+	memcpy(msg, &type, sizeof(type));
+	memcpy(msg+sizeof(type), &retCode, sizeof(retCode));
+	msg[msg_len] = '\0';
+
+	int status = send(sockFD, msg, msg_len, 0);
+
+	return status;
+}
+
+
+void Binder::proc_location_request(int sockFD, char * message){
 	ProcSignature proc;
 	memset(&proc, 0, sizeof(ProcSignature));
 
@@ -223,12 +263,19 @@ void Binder::proc_location_request(int msg_len, char * message){
 				 << server_location.locationInfo.s_id.addr.hostname << " "			
 	    	     << server_location.locationInfo.s_port << endl << endl;
 
+           sendLOC(sockFD, LOC_SUCCESS, &server_location, NULL);     
+           delete [] proc.procInfo.argTypes;     
+
     	}else{
     		throw failure();
     	}
     }catch(failure& e){
     	cout << "send LOC_FAILURE" << endl; 
     	cout << proc.procInfo.proc_name <<  " Arglen: " <<  proc.procInfo.argLen <<" -> " << endl;
+    	
+    	int code = -100;
+	    sendLOC(sockFD, LOC_FAILURE, NULL, &code);
+	     delete [] proc.procInfo.argTypes;
     }
 
 
@@ -254,7 +301,7 @@ ProcLocation Binder::roundRobinServer(list<ProcLocation>& loc_set){
 }
 
 
-void Binder::proc_registration(int msg_len, char * message){
+void Binder::proc_registration(int sockFD, char * message){
 	ProcSignature proc;
 	ProcLocation loc;
 	
@@ -319,6 +366,10 @@ void Binder::proc_registration(int msg_len, char * message){
 	    		else if(map_it->second.size() == 2)	
 	    			addToServerQueue(map_it->second);
 	    	}
+
+	    	// this proc is already in DB 
+	        delete [] proc.procInfo.argTypes;
+	 
 	    }else{
 	    	// no such entry is found, add new one to database
 	   		list<ProcLocation> loc_set;
@@ -331,8 +382,12 @@ void Binder::proc_registration(int msg_len, char * message){
 	    
 	    // next_prior_id++;
 	    // send SUCCESS  <msg_type + msg_size + REGISTER_SUCCESS >
+	    int code = 300;
+        sendREGISTER(sockFD, REGISTER_SUCCESS, code);
 	}catch(failure& e){
 		cout << "send FAILURE  <msg_type + msg_size + REGISTER_FAILURE >" << endl;
+		int code = -300;
+        sendREGISTER(sockFD, REGISTER_FAILURE, code);
 	}
 }
 
@@ -410,8 +465,9 @@ void Binder::setup_socket(){
     listen(binder_sockFD, SOMAXCONN);
     
     // get hostname and print
-    char hostname[64];
-    gethostname(hostname, sizeof(hostname));
+    char hostname[MAX_HOSTNAME_SIZE+1];
+	gethostname(hostname, MAX_HOSTNAME_SIZE);
+	hostname[MAX_HOSTNAME_SIZE] = '\0';
     cout << "BINDER_ADDRESS " << hostname << endl;
     
     // get binder port number and print

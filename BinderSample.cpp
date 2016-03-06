@@ -232,6 +232,8 @@ int main(int argc, const char * argv[]) {
 
     binder.proc_location_request(requestLen, requestFF1);
 
-
+    delete [] f.argTypes;
+    delete [] g.argTypes;
+    delete [] h.argTypes;
     return 0;
 }
