@@ -505,11 +505,11 @@ void Binder::setup_socket(){
     char hostname[MAX_HOSTNAME_SIZE+1];
 	gethostname(hostname, MAX_HOSTNAME_SIZE);
 	hostname[MAX_HOSTNAME_SIZE] = '\0';
-    cout << "BINDER_ADDRESS " << hostname << endl;
+    cout << "export BINDER_ADDRESS=" << hostname << endl;
     
     // get binder port number and print
     getsockname(binder_sockFD, (struct sockaddr *)&sock_in, (socklen_t *)&len);
-    cout << "BINDER_PORT " << ntohs(sock_in.sin_port) << endl;
+    cout << "export BINDER_PORT=" << ntohs(sock_in.sin_port) << endl;
 }
 
 
