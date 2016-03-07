@@ -118,7 +118,7 @@ Binder::~Binder(void){
 int Binder::handle_message(int sockFD){
 	__INFO("");
 
-    unsigned int msg_len;
+    unsigned int msg_len = 0;
     msg_type msgType;
     char *msg;
      
@@ -231,7 +231,7 @@ void Binder::proc_location_request(int sockFD, char * message){
 				 << server_location.locationInfo.s_id.addr.hostname << " "			
 	    	     << ntohs(server_location.locationInfo.s_port) << endl << endl;
 
-           sendLOC_SUCC(sockFD, LOC_SUCCESS, &server_location);     
+           sendLOC_SUCC(sockFD, server_location.locationInfo);     
            delete [] proc.procInfo.argTypes;     
 
     	}else{
@@ -425,10 +425,10 @@ int Binder::terminateServers(){
 
 
 // send LOC_SUCCESS to client with the server location
-int Binder::sendLOC_SUCC(int sockFD, msg_type type, ProcLocation* loc){
+int Binder::sendLOC_SUCC(int sockFD, location loc){
 	__INFO("");
-
-    unsigned int msg_len = sizeof(ProcLocation);	
+	int type = LOC_SUCCESS;
+    unsigned int msg_len = sizeof(location);	
     unsigned int total_len = sizeof(unsigned int) + sizeof(type) + msg_len;
 
 	char msg[total_len+1];
@@ -437,7 +437,7 @@ int Binder::sendLOC_SUCC(int sockFD, msg_type type, ProcLocation* loc){
 
 	memcpy(msg, &msg_len, sizeof(msg_len));
 	memcpy(msg+sizeof(msg_len), &type, sizeof(type));
-	memcpy(msg+sizeof(msg_len)+sizeof(type), loc, sizeof(ProcLocation));
+	memcpy(msg+sizeof(msg_len)+sizeof(type), &loc, sizeof(location));
 	msg[total_len] = '\0';
 
 	int status = send(sockFD, msg, total_len, 0);
