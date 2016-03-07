@@ -119,7 +119,7 @@ int Binder::handle_message(int sockFD){
 	__INFO("");
 
     unsigned int msg_len = 0;
-    msg_type msgType;
+    int msgType;
     char *msg;
      
     // receive message len
@@ -448,7 +448,7 @@ int Binder::sendLOC_SUCC(int sockFD, location loc){
 
 // send LOC_FAILURE, REGISTER_FAILURE, REGISTER_SUCCESS and UNKNOWN
 // message types with return code
-int Binder::sendResult(int sockFD, msg_type type, int retCode){
+int Binder::sendResult(int sockFD, int type, int retCode){
 	__INFO("");
 
 	unsigned int msg_len = sizeof(retCode);
