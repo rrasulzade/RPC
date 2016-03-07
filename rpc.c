@@ -485,9 +485,17 @@ int check_termination_protocol(int *termination){
 	if (bytesRcvd < 0) {
 		ERROR("ERROR: bytes rcvd is negative!");
 	}
-	if (msg_type == TERMINATE) *termination = 1;
-	DEBUG("check_termination_protocol () is returning...");
-	return ERR_RPC_SUCCESS;
+	
+	if (msg_type != TERMINATE){
+		DEBUG("check_termination_protocol () is returning... ERR_RPC_UNEXPECTED_MSG_TYPE msg_len=%d msg_type=%d reason_code=%d", msg_len, msg_type, reason_code);
+		for (volatile int i = 0; 1==1; i++);		// crash();
+		return ERR_RPC_UNEXPECTED_MSG_TYPE;
+	}
+	else{
+		*termination = 1;
+		DEBUG("check_termination_protocol () is returning successfully...");
+		return ERR_RPC_SUCCESS;
+	}
 }
 
 // Build the FD_SET for the select system call. Returns highest sock
@@ -542,7 +550,7 @@ int rpcExecute(){
 		highest_sock = select_list_setup (&fds);
 		DEBUG("select() is called!");
 		num_active_socks = select(highest_sock+1, &fds, 0, 0, 0);
-		DEBUG("select() returned!");
+		DEBUG("select() returned! num_active_socks=%d", num_active_socks);
 		if (num_active_socks < 0) {
 			ERROR("ERROR: Select returned error! No active sockets! Exiting...");
 			return ERR_RPC_SOCKET_INACTIVE;
