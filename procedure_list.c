@@ -82,6 +82,8 @@ int update (struct proc_node **head, proc_sig *sig, skel f) {
 }
 
 int delete_all (struct proc_node **head) {
+	DEBUG("delete_all() is called!");
+
 	struct proc_node *cur = *head;
 	while (cur != NULL) {
 		free(cur->sig.argTypes);
@@ -90,5 +92,7 @@ int delete_all (struct proc_node **head) {
 		cur = *head;
 	}
 	*head = NULL;
+	
+	DEBUG("delete_all() is returning...");
 	return 0;
 }
