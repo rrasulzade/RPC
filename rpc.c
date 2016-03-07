@@ -130,38 +130,246 @@ int setup_my_loc(){
 	getsockname (listening_sock, (struct sockaddr *)&s, (socklen_t*)&addrlen);
 	my_loc.s_port = s.sin_port;
 	DEBUG("SERVER_PORT %d\n", ntohs(my_loc.s_port));
-	return 0;
+	return ERR_RPC_SUCCESS;
+}
+
+int send_error_msg (char *reply_buff, int error, int sock) {
+	*((unsigned *)reply_buff) = sizeof(int);
+	*((int *)(reply_buff+sizeof(unsigned))) = EXECUTE_FAILURE;
+	*((int *)(reply_buff+sizeof(unsigned)+sizeof(int))) = error;
+	
+	//send the message
+	int ret = send (sock, reply_buff, sizeof(unsigned)+(2*sizeof(int)), 0);
+	
+	if (ret < 0){
+		DEBUG("ERROR: SENDING reply (EXECUTE_FAILURE) to the client failed!");
+		return ERR_RPC_SOCKET_FAILED;
+	}
+	return ERR_RPC_SUCCESS;
+}
+
+unsigned size_of_arg (int arg_type) {
+	DEBUG("size_of_arg is called");
+	unsigned size = 0;
+	switch ((arg_type >> 16) & 0xff) {
+		case ARG_CHAR:
+			size = sizeof(char);
+			break;
+		case ARG_SHORT:
+			size = sizeof(short);
+			break;
+		case ARG_INT:
+			size = sizeof(int);
+			break;
+		case ARG_LONG:
+			size = sizeof(long);
+			break;
+		case ARG_DOUBLE:
+			size = sizeof(double);
+			break;
+		case ARG_FLOAT:
+			size = sizeof(float);
+			break;
+		default:
+			DEBUG("Unknown argument type!\n");
+			break;
+	}
+	DEBUG("size_of_arg is returning");
+	if ((arg_type & 0xff) == 0) return size;
+	return size*(arg_type & 0xff);
+}
+
+unsigned find_args_size (unsigned arglen, int* argTypes, unsigned *arg_sizes) {
+	DEBUG("find_args_size is called");
+	unsigned total_arg_size = 0;
+	for (unsigned i = 0; i < arglen; i++) {
+		arg_sizes[i] = size_of_arg (argTypes[i]);
+		total_arg_size += arg_sizes[i];
+	}
+	DEBUG("find_args_size is returning");
+	return total_arg_size;
+}
+
+int unmarshall_args_no_alloc (unsigned arglen, int *argTypes, char *args_buff, void **args) {
+	DEBUG("unmarshall_args_no_alloc is called    arglen=%d", arglen);
+	unsigned size_arg = 0;
+	for (unsigned i = 0; i < arglen; i++){
+		size_arg = size_of_arg (argTypes[i]);
+		DEBUG("args=%p  args[i]=%p  argTypes[i]=%x  size_arg=%d", (void*)args, args[i], argTypes[i], size_arg);
+		DEBUG ("args_buff=%p", args_buff);
+		memcpy(args[i], args_buff, size_arg);
+		DEBUG("here");
+		args_buff += size_arg;
+	}
+	DEBUG("unmarshall_args_no_alloc is returning");
+	return ERR_RPC_SUCCESS;
+}
+
+int unmarshall_args (unsigned arglen, int *argTypes, char *args_buff, void **args) {
+	DEBUG("unmarshall_args is called    arglen=%d", arglen);
+	unsigned size_arg = 0;
+	for (unsigned i = 0; i < arglen; i++){
+		size_arg = size_of_arg (argTypes[i]);
+		args[i] = malloc(size_arg);
+		if (args[i] == NULL) {
+			// cleanup before returning error
+			for (unsigned j = 0; j < i; j++) free(args[j]);
+			DEBUG("unmarshall_args is returning NULL");
+			return ERR_RPC_OUT_OF_MEMORY;
+		}
+		memcpy(args[i], args_buff, size_arg);
+		args_buff += size_arg;
+	}
+	DEBUG("unmarshall_args is returning succesfully");
+	return ERR_RPC_SUCCESS;
+}
+
+int marshall_args (unsigned arglen, int *argTypes, char *args_buff, void **args) {
+	DEBUG("marshall_args is called");
+	unsigned size_arg = 0;
+	for (unsigned i = 0; i < arglen; i++){
+		size_arg = size_of_arg (argTypes[i]);
+		memcpy(args_buff, args[i], size_arg);
+		args_buff += size_arg;
+	}
+	DEBUG("marshall_args is returning");
+	return ERR_RPC_SUCCESS;
+}
+
+void destroy_args (unsigned arglen, void **args, void **args_origin) {
+	for (unsigned i = 0; i < arglen; i++) {
+		// deallocate the memory allocated in skeleton
+		if (args[i] != args_origin[i]) free(args[i]);
+		
+		// eallocate the memory allocated for procedure invocation
+		free(args_origin[i]);
+	}
+	free(args);
+	free(args_origin);
 }
 
 int handle_request (int sock){
 	// receive the data and reply with the response
+	unsigned msg_len = 0;
+	int bytesRcvd = 0, msg_type = 0, response_len = 0, ret_code = ERR_RPC_SUCCESS;
 	
+	bytesRcvd = recv(sock, &msg_len, 4, 0);
+	if (bytesRcvd < 0) {
+		DEBUG("ERROR: bytes rcvd is negative!");
+		return ERR_RPC_SOCKET_FAILED;
+	}
 	
+	bytesRcvd = recv(sock, &msg_type, 4, 0);
+	if (bytesRcvd < 0) {
+		DEBUG("ERROR: bytes rcvd is negative!");
+		return ERR_RPC_SOCKET_FAILED;
+	}
 	
+	char *msg_req = malloc(sizeof(unsigned) + sizeof(int) + msg_len);
+	if (msg_req == NULL) return ERR_RPC_OUT_OF_MEMORY;
 	
+	char *msg_offset = msg_req+sizeof(unsigned)+sizeof(int);
+	bytesRcvd = recv(sock, msg_offset, msg_len, 0);
+	if (bytesRcvd < 0) {
+		DEBUG("ERROR: bytes rcvd is negative!");
+		return ERR_RPC_SOCKET_FAILED;
+	}
 	
+	if (msg_type != EXECUTE){
+		DEBUG("Unknown request type from the client");
+		send_error_msg (msg_req, ERR_RPC_UNEXPECTED_MSG_TYPE, sock);
+		free(msg_req);
+		return ERR_RPC_UNEXPECTED_MSG_TYPE;
+	}
 	
+	// unmarshal the message to find skel corresponding to name and argTypes
+	proc_sig sig;
+	memset (&sig, 0, sizeof(proc_sig));
+	strncpy(sig.proc_name, msg_offset, MAX_PROC_NAME_SIZE);
+	sig.proc_name[MAX_PROC_NAME_SIZE] = '\0';
 	
+	msg_offset += (MAX_PROC_NAME_SIZE+1)*sizeof(char);
+	sig.argLen = *((unsigned *)msg_offset);
 	
+	msg_offset += sizeof(unsigned);
+	sig.argTypes = (int*)msg_offset;
 	
+	skel f = find_skel (&proc_list, &sig);
+	if (f == NULL) {
+		send_error_msg (msg_req, ERR_RPC_UNREGISTERED_PROC, sock);
+		free(msg_req);
+		return ERR_RPC_UNREGISTERED_PROC;
+	}
+	void **args = (void**)malloc(sig.argLen*(sizeof(void*)));
+	if (args == NULL) {
+		send_error_msg (msg_req, ERR_RPC_OUT_OF_MEMORY, sock);
+		free(msg_req);
+		return ERR_RPC_OUT_OF_MEMORY;
+	}
+	void **args_origin = (void**)malloc(sig.argLen*(sizeof(void*)));
+	if (args_origin == NULL) {
+		send_error_msg (msg_req, ERR_RPC_OUT_OF_MEMORY, sock);
+		free(msg_req);
+		free(args);
+		return ERR_RPC_OUT_OF_MEMORY;
+	}
 	
+	msg_offset += (sig.argLen+1)*sizeof(int);
+	ret_code = unmarshall_args(sig.argLen, sig.argTypes, msg_offset, args);
+	if (ret_code == ERR_RPC_OUT_OF_MEMORY){
+		send_error_msg (msg_req, ERR_RPC_OUT_OF_MEMORY, sock);
+		free(msg_req);
+		free(args);
+		free(args_origin);
+		return ERR_RPC_OUT_OF_MEMORY;
+	}
+	// copy original args before envoking the procedure to avoid memory leaks
+	memcpy(args_origin, args, sig.argLen*(sizeof(void*)));
 	
+	DEBUG("Invoking the proc!  name:%s    skeleton:%p", sig.proc_name, (void*)f);
+	ret_code = f(sig.argTypes, args);
+	DEBUG ("Result of function call:%d    args[0]=%d", ret_code, *(int*)args[0]);
 	
+	if (ret_code) {	// function returned error
+		send_error_msg (msg_req, ERR_RPC_PROC_EXEC_FAILED, sock);
+		free(msg_req);
+		destroy_args (sig.argLen, args, args_origin);
+		return ERR_RPC_PROC_EXEC_FAILED;
+	}
+	response_len = sizeof(unsigned)+sizeof(int)+msg_len;
+	*((unsigned *)msg_req) = msg_len;
+	*((int *)(msg_req+sizeof(unsigned))) = EXECUTE_SUCCESS;
+	msg_offset = msg_req+sizeof(unsigned)+sizeof(int)+(MAX_PROC_NAME_SIZE+1)*sizeof(char)
+				+sizeof(unsigned)+(sig.argLen+1)*sizeof(int);
+	// copy args
+	marshall_args (sig.argLen, sig.argTypes, msg_offset, args);
 	
-	return 0;
+	//send the success message
+	ret_code = send (sock, msg_req, response_len, 0);
+	if (ret_code < 0){
+		DEBUG("ERROR: SENDING reply (EXECUTE_FAILURE) to the client failed!");
+		ret_code = ERR_RPC_SOCKET_FAILED;
+	}
+	else ret_code = ERR_RPC_SUCCESS;
+	
+	// free dynamic memory allocated
+	free(msg_req);
+	destroy_args (sig.argLen, args, args_origin);
+	DEBUG("client_to_server is returning...");
+	return ret_code;
 }
 
 void *worker_code (void *ptr){
-	int sock = 0, ret = 0;
+	int sock = 0, ret_code = 0;
 	
 	while (1){
-		ret = queue_front (&intQ, &sock);
-		if (ret != ERR_QUEUE_SUCCESS) continue;
+		ret_code = queue_front (&intQ, &sock);
+		if (ret_code != ERR_QUEUE_SUCCESS) continue;
 		queue_pop (&intQ);
 		
 		// if sock == -1, then termination signal has been sent.
 		if (sock == -1) break;
-		ret = handle_request(sock);
+		ret_code = handle_request(sock);
 	}
 	
 	return 0;
@@ -235,7 +443,7 @@ int accept_new_connection () {
 int check_termination_protocol(int *termination){
 	// rcv msg from binder and check if it is termination request.
 	// If yes terminate by setting *termination to 1, resume execution otherwise.
-	int bytesRcvd, msg_len, msg_type;
+	int bytesRcvd, msg_type; unsigned msg_len;
 	bytesRcvd = recv(binder_sock, &msg_len, 4, 0);
 	bytesRcvd = recv(binder_sock, &msg_type, 4, 0);
 	if (bytesRcvd < 0) {
@@ -385,106 +593,6 @@ int rpcRegister(char* name, int* argTypes, skeleton f) {
 	return ret;
 }
 
-unsigned size_of_arg (int arg_type) {
-	DEBUG("size_of_arg is called");
-	unsigned size = 0;
-	switch ((arg_type >> 16) & 0xff) {
-		case ARG_CHAR:
-			size = sizeof(char);
-			break;
-		case ARG_SHORT:
-			size = sizeof(short);
-			break;
-		case ARG_INT:
-			size = sizeof(int);
-			break;
-		case ARG_LONG:
-			size = sizeof(long);
-			break;
-		case ARG_DOUBLE:
-			size = sizeof(double);
-			break;
-		case ARG_FLOAT:
-			size = sizeof(float);
-			break;
-		default:
-			DEBUG("Unknown argument type!\n");
-			break;
-	}
-	DEBUG("size_of_arg is returning");
-	if ((arg_type & 0xff) == 0) return size;
-	return size*(arg_type & 0xff);
-}
-
-unsigned find_args_size (unsigned arglen, int* argTypes, unsigned *arg_sizes) {
-	DEBUG("find_args_size is called");
-	unsigned total_arg_size = 0;
-	for (unsigned i = 0; i < arglen; i++) {
-		arg_sizes[i] = size_of_arg (argTypes[i]);
-		total_arg_size += arg_sizes[i];
-	}
-	DEBUG("find_args_size is returning");
-	return total_arg_size;
-}
-
-int unmarshall_args_no_alloc (unsigned arglen, int *argTypes, char *args_buff, void **args) {
-	DEBUG("unmarshall_args_no_alloc is called    arglen=%d", arglen);
-	unsigned size_arg = 0;
-	for (unsigned i = 0; i < arglen; i++){
-		size_arg = size_of_arg (argTypes[i]);
-		DEBUG("args=%p  args[i]=%p  argTypes[i]=%x  size_arg=%d", (void*)args, args[i], argTypes[i], size_arg);
-		DEBUG ("args_buff=%p", args_buff);
-		memcpy(args[i], args_buff, size_arg);
-		DEBUG("here");
-		args_buff += size_arg;
-	}
-	DEBUG("unmarshall_args_no_alloc is returning");
-	return ERR_RPC_SUCCESS;
-}
-
-int unmarshall_args (unsigned arglen, int *argTypes, char *args_buff, void **args) {
-	DEBUG("unmarshall_args is called    arglen=%d", arglen);
-	unsigned size_arg = 0;
-	for (unsigned i = 0; i < arglen; i++){
-		size_arg = size_of_arg (argTypes[i]);
-		args[i] = malloc(size_arg);
-		if (args[i] == NULL) {
-			// cleanup before returning error
-			for (unsigned j = 0; j < i; j++) free(args[j]);
-			DEBUG("unmarshall_args is returning NULL");
-			return ERR_RPC_OUT_OF_MEMORY;
-		}
-		memcpy(args[i], args_buff, size_arg);
-		args_buff += size_arg;
-	}
-	DEBUG("unmarshall_args is returning succesfully");
-	return ERR_RPC_SUCCESS;
-}
-
-int marshall_args (unsigned arglen, int *argTypes, char *args_buff, void **args) {
-	DEBUG("marshall_args is called");
-	unsigned size_arg = 0;
-	for (unsigned i = 0; i < arglen; i++){
-		size_arg = size_of_arg (argTypes[i]);
-		memcpy(args_buff, args[i], size_arg);
-		args_buff += size_arg;
-	}
-	DEBUG("marshall_args is returning");
-	return ERR_RPC_SUCCESS;
-}
-
-void destroy_args (unsigned arglen, void **args, void **args_origin) {
-	for (unsigned i = 0; i < arglen; i++) {
-		// deallocate the memory allocated in skeleton
-		if (args[i] != args_origin[i]) free(args[i]);
-		
-		// eallocate the memory allocated for procedure invocation
-		free(args_origin[i]);
-	}
-	free(args);
-	free(args_origin);
-}
-
 void simulated_send_error_msg (char *msg_response, char *reply_buff, int error) {
 	*((unsigned *)reply_buff) = sizeof(int);
 	*((int *)(reply_buff+sizeof(unsigned))) = EXECUTE_FAILURE;
@@ -591,7 +699,8 @@ int locate_server(char *msg, unsigned total_len, location *server_loc){
 		return ERR_RPC_BINDER_NOT_FOUND;
 	}
 	
-	int bytesRcvd = 0, msg_len = 0, msg_type = 0, ret_code = ERR_RPC_SUCCESS;
+	unsigned msg_len = 0;
+	int bytesRcvd = 0, msg_type = 0, ret_code = ERR_RPC_SUCCESS;
 	
 	bytesRcvd = recv(binder_sock, &msg_len, 4, 0);
 	if (bytesRcvd < 0) {
@@ -630,23 +739,36 @@ int locate_server(char *msg, unsigned total_len, location *server_loc){
 }
 
 int create_server_connection (int *server_sock, location *server_loc){
+	// create a socket to connect to the binder
+	struct sockaddr_in server;
+	*server_sock = socket (AF_INET, SOCK_STREAM, 0);
+	if (*server_sock == -1) {
+		DEBUG("ERROR: Client could not create a server_socket!!! Exiting...\n");
+		return ERR_RPC_SOCKET_FAILED;
+	}
 	
+	struct hostent *he = gethostbyname(server_loc->s_id.addr.hostname);
+	memcpy (&server.sin_addr, he->h_addr_list[0], he->h_length);
+	server.sin_family = AF_INET;
+	server.sin_port = server_loc->s_port;
 	
+	if (connect (*server_sock, (struct sockaddr *)&server, sizeof(server)) < 0) {
+		DEBUG("ERROR: Could not connect to the server! Exiting...\n");
+		return ERR_RPC_SOCKET_FAILED;
+	}
 	
 	return ERR_RPC_SUCCESS;
 }
 
 int send_request (int *server_sock, char *msg, unsigned total_msg_len){
-	
-	
-	
+	int ret = send (*server_sock, msg, total_msg_len, 0);
+	if (ret < 0) return ERR_RPC_SOCKET_FAILED;
 	return ERR_RPC_SUCCESS;
 }
 
 int rcv_response (int *server_sock, char *msg_response, unsigned total_msg_len){
-	
-	
-	
+	int bytesRcvd = recv(*server_sock, &msg_response, total_msg_len, 0);
+	if (bytesRcvd < 0) return ERR_RPC_SOCKET_FAILED;
 	return ERR_RPC_SUCCESS;
 }
 
