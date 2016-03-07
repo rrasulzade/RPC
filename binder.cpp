@@ -569,12 +569,14 @@ void Binder::start(){
 
                     // TERMINATE msg is received 
                     if (status == TERMINATE_ALL){
+                    	cout << "Terminate all servers are done " << endl;
                     	stop = true;
                     	break;
                     }
 
                     // erroneous msg is received or connection is closed
                     if (status <= 0 ) {
+                    	cout << "Close connection socket " << endl;
                         close(connections[i]);
                         FD_CLR(connections[i], &readfds);
                         connections.erase(connections.begin() + i);
