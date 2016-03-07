@@ -2,7 +2,6 @@
 #define		__BINDER_H__
 
 #include <map>
-#include <set>
 #include <list>
 #include <exception>
 
@@ -59,8 +58,8 @@ class Binder{
   	void start();
   	void setup_socket();
   	int handle_message(int sockFD);
-    int sendLOC(int sockFD, msg_type type, ProcLocation* loc, int* retCode);
-    int sendREGISTER(int sockFD, msg_type type, int& retCode);
+    int sendLOC_SUCC(int sockFD, msg_type type, ProcLocation* loc);
+    int sendResult(int sockFD, msg_type type, int& retCode);
     void proc_registration(int sockFD, char * message);
     void proc_location_request(int sockFD, char * message);
   	ProcLocation roundRobinServer(std::list<ProcLocation>& loc_set);

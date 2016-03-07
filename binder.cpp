@@ -16,9 +16,7 @@
 #include <netdb.h>
 
 #include "binder.h"
-
 #include "debug.h"
-
 
 
 using namespace std;
@@ -94,7 +92,8 @@ bool operator==(const ProcLocation& lhs, const ProcLocation& rhs){
 	// cout << "==Loc==1 " << lhs.locationInfo.s_id.addr.hostname << ":" << lhs.locationInfo.s_port 
 	     // << "  " << rhs.locationInfo.s_id.addr.hostname << ":" << rhs.locationInfo.s_port << endl;
 
-	if(lhs.locationInfo.s_port != rhs.locationInfo.s_port){
+	if(lhs.locationInfo.s_port != rhs.locationInfo.s_port || 
+		memcmp(lhs.locationInfo.s_id.addr.hostname, rhs.locationInfo.s_id.addr.hostname, MAX_HOSTNAME_SIZE) != 0){
 		return false;
 	}
 	return true;
@@ -152,13 +151,22 @@ int Binder::handle_message(int sockFD){
     	return status;
    	}
 
-	msg = new char[msg_len+1];					  		   	// << +1 is already done ????
-	status = recv(sockFD, msg, msg_len, 0);				    // << +1 is already done ????
+   	try{
+		msg = new char[msg_len+1];					  		   	
+	}catch(bad_alloc& e){
+		int code = ERR_BINDER_OUT_OF_MEMORY;
+		if(msg_type == REGISTER)
+			sendREGISTER(sockFD, REGISTER_FAILURE, code);
+		else if(msg_type == LOC_REQUEST)		
+	    	sendLOC(sockFD, LOC_FAILURE, NULL, &code);
+	}
+
+	status = recv(sockFD, msg, msg_len, 0);				    
 	if(status < 0){  
     	cerr << "ERROR: on receiving message" << endl;
     	return status;
    	}
-   	msg[msg_len] = '\0';   // already null terminated ???
+   	msg[msg_len] = '\0';  
 
    	 // msg_type = *(int*)(msg);
 
@@ -168,7 +176,6 @@ int Binder::handle_message(int sockFD){
    		return status;
    	}
 
-   	
    	switch(msg_type){
    		case REGISTER:
    			proc_registration(sockFD, msg);
@@ -180,6 +187,8 @@ int Binder::handle_message(int sockFD){
    			terminateServers();
    			status = TERMINATE_ALL;								 
    			break;
+   		default:
+   			status = sendResult(sockFD, UNKNOWN, ERR_RPC_UNEXPECTED_MSG_TYPE); 	
    	}
 
     delete msg;
@@ -187,32 +196,25 @@ int Binder::handle_message(int sockFD){
 }
 
 
-
-int Binder::sendLOC(int sockFD, msg_type type, ProcLocation* loc, int* retCode){
+// send LOC_SUCCESS to client with the server location
+int Binder::sendLOC_SUCC(int sockFD, msg_type type, ProcLocation* loc){
 	int status = 0;
-    unsigned int msg_len = sizeof(type);
+    unsigned int msg_len = sizeof(type) + sizeof(ProcLocation);
+	char msg[msg_len+1];
+	
+	memcpy(msg, &type, sizeof(type));
+	memcpy(msg+sizeof(type), loc, sizeof(ProcLocation));
+	msg[msg_len] = '\0';
 
-    if(type == LOC_SUCCESS && loc != NULL){
-        msg_len += sizeof(ProcLocation);
-		char msg[msg_len+1];
-		memcpy(msg, &type, sizeof(type));
-		memcpy(msg+sizeof(type), loc, sizeof(ProcLocation));
-		msg[msg_len] = '\0';
-		status = send(sockFD, msg, msg_len, 0);
-    }else{
-		msg_len += sizeof(int);
-		char msg[msg_len+1];
-		memcpy(msg, &type, sizeof(type));
-		memcpy(msg+sizeof(type), retCode, sizeof(int));
-		msg[msg_len] = '\0';
-		status = send(sockFD, msg, msg_len, 0);
-    }
+	status = send(sockFD, msg, msg_len, 0);
 
     return status;
 }
 
 
-int Binder::sendREGISTER(int sockFD, msg_type type, int& retCode){
+// send LOC_FAILURE, REGISTER_FAILURE, REGISTER_SUCCESS and UNKNOWN
+// message types with return code
+int Binder::sendResult(int sockFD, msg_type type, int retCode){
 	unsigned int msg_len = sizeof(type) + sizeof(retCode);
 	char msg[msg_len+1];
 
@@ -226,6 +228,7 @@ int Binder::sendREGISTER(int sockFD, msg_type type, int& retCode){
 }
 
 
+// handle requests from client that needs the server location
 void Binder::proc_location_request(int sockFD, char * message){
 	ProcSignature proc;
 	memset(&proc, 0, sizeof(ProcSignature));
@@ -238,7 +241,17 @@ void Binder::proc_location_request(int sockFD, char * message){
 	// find length of argTypes
     int argLen = *(int*) message; 
     proc.procInfo.argLen = argLen;
-	proc.procInfo.argTypes = new int[argLen+1];
+
+    // handle memory allocation error 
+    try{
+		proc.procInfo.argTypes = new int[argLen+1];
+	}catch(bad_alloc& e){
+		cout << "send LOC_FAILURE  ERR_BINDER_OUT_OF_MEMORY" << endl; 
+
+    	int code = ERR_BINDER_OUT_OF_MEMORY;
+	    sendLOC(sockFD, LOC_FAILURE, NULL, &code);
+	    return;
+	}
 
 	// read argTypes
 	message += sizeof(int);
@@ -273,9 +286,9 @@ void Binder::proc_location_request(int sockFD, char * message){
     	cout << "send LOC_FAILURE" << endl; 
     	cout << proc.procInfo.proc_name <<  " Arglen: " <<  proc.procInfo.argLen <<" -> " << endl;
     	
-    	int code = -100;
+    	int code = ERR_RPC_NO_SERVER_AVAIL;
 	    sendLOC(sockFD, LOC_FAILURE, NULL, &code);
-	     delete [] proc.procInfo.argTypes;
+	    delete [] proc.procInfo.argTypes;
     }
 
 
@@ -324,7 +337,17 @@ void Binder::proc_registration(int sockFD, char * message){
  	// find length of argTypes
     int argLen = *(int*) p; 
     proc.procInfo.argLen = argLen;
-	proc.procInfo.argTypes = new int[argLen+1];
+
+    // handle memory allocation error 
+	try{
+		proc.procInfo.argTypes = new int[argLen+1];
+	}catch(bad_alloc& e){
+		cout << "send REG_FAILURE  ERR_BINDER_OUT_OF_MEMORY" << endl; 
+
+    	int code = ERR_BINDER_OUT_OF_MEMORY;
+	    sendREGISTER(sockFD, REGISTER_FAILURE, code);
+	    return;
+	}
 
 	// read argTypes
 	p += sizeof(int);
@@ -379,14 +402,13 @@ void Binder::proc_registration(int sockFD, char * message){
 	    	// debug("Add new entry");	    		
 	    }
 
-	    
-	    // next_prior_id++;
-	    // send SUCCESS  <msg_type + msg_size + REGISTER_SUCCESS >
-	    int code = 300;
+	    cout << "send SUCCESS  <msg_type + msg_size + ERR_RPC_SUCCESS >" << endl;
+	    int code = ERR_RPC_SUCCESS;
         sendREGISTER(sockFD, REGISTER_SUCCESS, code);
+
 	}catch(failure& e){
-		cout << "send FAILURE  <msg_type + msg_size + REGISTER_FAILURE >" << endl;
-		int code = -300;
+		cout << "send FAILURE  <msg_type + msg_size + ERR_RPC_PROC_RE_REG >" << endl;
+		int code = ERR_RPC_PROC_RE_REG;
         sendREGISTER(sockFD, REGISTER_FAILURE, code);
 	}
 }
