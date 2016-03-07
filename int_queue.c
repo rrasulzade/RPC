@@ -52,7 +52,6 @@ int queue_push (intQueue *Q, int data){
 			DEBUG("WARNING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! (head != NULL || tail != NULL),  BUT size = 0");
 		}	
 		Q->head = Q->tail = newnode;
-		pthread_cond_signal (&CV);
 	}
 	else {
 		Q->tail->next = newnode;
@@ -60,6 +59,7 @@ int queue_push (intQueue *Q, int data){
 	}
 	
 	Q->size++;
+	pthread_cond_signal (&CV);
 	pthread_mutex_unlock(&Qmutex);
 	return ERR_QUEUE_SUCCESS;
 }

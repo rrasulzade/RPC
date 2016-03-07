@@ -34,7 +34,7 @@ ${RPCLIB} : ${RPCOBJECTS}
 
 
 ${BINDEREXEC} : ${BINDERSRC}
-	${CXX} ${CXXFLAGS} binder.cpp BinderSample.cpp -o $@
+	${CXX} ${CXXFLAGS} binder.cpp -o $@
 
 
 

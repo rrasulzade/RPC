@@ -64,19 +64,19 @@ int create_listening_sock(){
 	
 	if (listening_sock == -1) {
 		DEBUG("ERROR: could not create a listening socket! Exiting...\n");
-		return -1;
+		return ERR_RPC_SOCKET_FAILED;
 	}
 	
 	// bind the socket to the sockaddr
 	int ret = bind(listening_sock, (struct sockaddr *) &server, sizeof(server));
 	if (ret != 0){
 		DEBUG("ERROR: could not bind the listening socket! Exiting...\n");
-		return -1;
+		return ERR_RPC_SOCKET_FAILED;
 	}
 	// start listening to be able to accept connection requests
 	listen (listening_sock, SOMAXCONN);
 	
-	return 0;
+	return ERR_RPC_SUCCESS;
 }
 
 int create_binder_sock(){
@@ -85,13 +85,13 @@ int create_binder_sock(){
 	binder_sock = socket (AF_INET, SOCK_STREAM, 0);
 	if (binder_sock == -1) {
 		DEBUG("ERROR: could not create a binder_socket!!! Exiting...\n");
-		return -1;
+		return ERR_RPC_SOCKET_FAILED;
 	}
 	
 	char *env = getenv("BINDER_ADDRESS");
 	if (env == NULL) {
 		DEBUG("ERROR: NULL POINTER in env[addr] variable! Exiting...\n");
-		return -1;
+		return ERR_RPC_SOCKET_FAILED;
 	}
 	
 	struct hostent *he = gethostbyname(env);
@@ -111,7 +111,7 @@ int create_binder_sock(){
 		return -1;
 	}
 	
-	return 0;
+	return ERR_RPC_SUCCESS;
 }
 
 
@@ -129,21 +129,6 @@ int setup_my_loc(){
 	getsockname (listening_sock, (struct sockaddr *)&s, (socklen_t*)&addrlen);
 	my_loc.s_port = s.sin_port;
 	DEBUG("SERVER_PORT %d\n", ntohs(my_loc.s_port));
-	return ERR_RPC_SUCCESS;
-}
-
-int send_error_msg (char *reply_buff, int error, int sock) {
-	*((unsigned *)reply_buff) = sizeof(int);
-	*((int *)(reply_buff+sizeof(unsigned))) = EXECUTE_FAILURE;
-	*((int *)(reply_buff+sizeof(unsigned)+sizeof(int))) = error;
-	
-	//send the message
-	int ret = send (sock, reply_buff, sizeof(unsigned)+(2*sizeof(int)), 0);
-	
-	if (ret < 0){
-		DEBUG("ERROR: SENDING reply (EXECUTE_FAILURE) to the client failed!");
-		return ERR_RPC_SOCKET_FAILED;
-	}
 	return ERR_RPC_SUCCESS;
 }
 
@@ -245,6 +230,21 @@ void destroy_args (unsigned arglen, void **args, void **args_origin) {
 	}
 	free(args);
 	free(args_origin);
+}
+
+int send_error_msg (char *reply_buff, int error, int sock) {
+	*((unsigned *)reply_buff) = sizeof(int);
+	*((int *)(reply_buff+sizeof(unsigned))) = EXECUTE_FAILURE;
+	*((int *)(reply_buff+sizeof(unsigned)+sizeof(int))) = error;
+	
+	//send the message
+	int ret = send (sock, reply_buff, sizeof(unsigned)+(2*sizeof(int)), 0);
+	
+	if (ret < 0){
+		DEBUG("ERROR: SENDING reply (EXECUTE_FAILURE) to the client failed!");
+		return ERR_RPC_SOCKET_FAILED;
+	}
+	return ERR_RPC_SUCCESS;
 }
 
 int handle_request (int sock){
@@ -354,7 +354,7 @@ int handle_request (int sock){
 	// free dynamic memory allocated
 	free(msg_req);
 	destroy_args (sig.argLen, args, args_origin);
-	DEBUG("client_to_server is returning...");
+	DEBUG("handle_request is returning...");
 	return ret_code;
 }
 
@@ -371,7 +371,7 @@ void *worker_code (void *ptr){
 		ret_code = handle_request(sock);
 	}
 	
-	return 0;
+	return ERR_RPC_SUCCESS;
 }
 
 int rpcInit() {
@@ -397,7 +397,7 @@ int rpcInit() {
 			return -1;
 		}
 	}
-	return 0;
+	return ERR_RPC_SUCCESS;
 }
 
 int send_termination_request (){
@@ -422,10 +422,7 @@ int rpcTerminate(){
 	
 	ret = send_termination_request();
 	close(binder_sock);
-	if (ret != ERR_RPC_SUCCESS) return ret;
-	
-	
-	return ERR_RPC_SUCCESS;
+	return ret;
 }
 
 int accept_new_connection () {
@@ -433,7 +430,7 @@ int accept_new_connection () {
 	struct sockaddr_in client;
 	int addrlen = sizeof(struct sockaddr_in);
 	int new_sock = accept(listening_sock, (struct sockaddr *)&client, (socklen_t*)&addrlen);
-	if (new_sock < 0) return -1;
+	if (new_sock < 0) return ERR_RPC_SOCKET_FAILED;
 	
 	// Accept is successful. Push the socket into the queue so that the worker threads can serve
 	return queue_push (&intQ, new_sock);
@@ -449,7 +446,7 @@ int check_termination_protocol(int *termination){
 		DEBUG("ERROR: bytes rcvd is negative!");
 	}
 	if (msg_type == TERMINATE) *termination = 1;
-	return 0;
+	return ERR_RPC_SUCCESS;
 }
 
 // process sockets that are active
@@ -472,7 +469,7 @@ int terminate_worker_threads (){
 	for (int i = 0; i < NUM_THREADS; i++){
 		pthread_join (worker_threads[i], NULL);
 	}
-	return 0;
+	return ERR_RPC_SUCCESS;
 }
 
 int rpcExecute(){
