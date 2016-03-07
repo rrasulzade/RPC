@@ -545,7 +545,8 @@ void Binder::start(){
         }
 
         // check all existing connections
-        for(unsigned int i = 0; i < connections.size(); i++){
+        unsigned int i = 0; 
+        while(i < connections.size()){
             // there is an incoming connection
             if(FD_ISSET(connections[i], &readfds)){
 
@@ -584,6 +585,7 @@ void Binder::start(){
                     }
                 }
             }
+            i++;
         }
     }
     
