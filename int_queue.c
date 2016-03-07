@@ -104,6 +104,7 @@ int queue_pop (intQueue *Q, int *data){
 
 int queue_reset (intQueue *Q){
 	pthread_mutex_lock(&Qmutex);
+	DEBUG("queue_reset() is called!");
 	struct node *cur = Q->head, *node_del;
 	while (cur != NULL){
 		node_del = cur;
@@ -111,6 +112,7 @@ int queue_reset (intQueue *Q){
 		free(node_del);
 	}
 	queue_init (Q);
+	DEBUG("queue_reset() is returning...");
 	pthread_mutex_unlock(&Qmutex);
 	return 0;
 }
