@@ -416,14 +416,17 @@ int rpcInit() {
 
 int send_termination_request (){
 	DEBUG("send_termination_request() is called...");
-	char *msg = malloc(8*sizeof(char));
+	unsigned total_len = sizeof(unsigned)+2*sizeof(int);
+	char *msg = malloc(total_len);
 	if (msg == NULL) {
 		ERROR("ERR_RPC_OUT_OF_MEMORY");
 		return ERR_RPC_OUT_OF_MEMORY;
 	}
-	memset(msg, 0, 8*sizeof(char));
-	(*(int *)(msg+sizeof(unsigned))) = TERMINATE;
-	int ret = send (binder_sock, msg, sizeof(unsigned)+sizeof(int), 0);
+	memset(msg, 0, total_len);
+	*(unsigned *)(msg) = sizeof(int);
+	*((int *)(msg+sizeof(unsigned))) = TERMINATE;
+	*((int *)(msg+sizeof(unsigned)+sizeof(int))) = ERR_RPC_SUCCESS;
+	int ret = send (binder_sock, msg, total_len, 0);
 	free(msg);
 	
 	if (ret < 0){
@@ -467,9 +470,18 @@ int check_termination_protocol(int *termination){
 	DEBUG("check_termination_protocol () is called...");
 	// rcv msg from binder and check if it is termination request.
 	// If yes terminate by setting *termination to 1, resume execution otherwise.
-	int bytesRcvd, msg_type; unsigned msg_len;
+	int bytesRcvd, msg_type, reason_code; unsigned msg_len;
 	bytesRcvd = recv(binder_sock, &msg_len, 4, 0);
+	if (bytesRcvd < 0) {
+		ERROR("ERROR: bytes rcvd is negative!");
+	}
+	
 	bytesRcvd = recv(binder_sock, &msg_type, 4, 0);
+	if (bytesRcvd < 0) {
+		ERROR("ERROR: bytes rcvd is negative!");
+	}
+	
+	bytesRcvd = recv(binder_sock, &reason_code, 4, 0);
 	if (bytesRcvd < 0) {
 		ERROR("ERROR: bytes rcvd is negative!");
 	}
@@ -647,97 +659,6 @@ void simulated_send_error_msg (char *msg_response, char *reply_buff, int error) 
 	*((int *)(reply_buff+sizeof(unsigned)+sizeof(int))) = error;
 	//send the message
 	memcpy (msg_response, reply_buff, sizeof(unsigned)+sizeof(int)+sizeof(int));
-}
-
-int client_to_server (char *msg_req, char *msg_response) {
-	DEBUG("client_to_server is called");
-	unsigned msg_len = *((unsigned *)msg_req);
-	int msg_type = *((int *)(msg_req+sizeof(unsigned)));
-	
-	char *reply_buff = malloc(sizeof(unsigned) + sizeof(int) + msg_len);
-	if (reply_buff == NULL) return ERR_RPC_OUT_OF_MEMORY;
-	
-	memset(reply_buff, 0, sizeof(unsigned) + sizeof(int) + msg_len);
-	
-	if (msg_type != EXECUTE){
-		ERROR("Unknown request type from the client");
-		simulated_send_error_msg (msg_response, reply_buff, ERR_RPC_UNEXPECTED_MSG_TYPE);
-		free(reply_buff);
-		return ERR_RPC_UNEXPECTED_MSG_TYPE;
-	}
-	
-	// unmarshal the message to find skel corresponding to name and argTypes
-	char *msg_offset = msg_req+sizeof(unsigned)+sizeof(int);
-	proc_sig sig;
-	memset (&sig, 0, sizeof(proc_sig));
-	strncpy(sig.proc_name, msg_offset, MAX_PROC_NAME_SIZE);
-	sig.proc_name[MAX_PROC_NAME_SIZE] = '\0';
-	
-	msg_offset += (MAX_PROC_NAME_SIZE+1)*sizeof(char);
-	sig.argLen = *((unsigned *)msg_offset);
-	
-	msg_offset += sizeof(unsigned);
-	sig.argTypes = (int*)msg_offset;
-	
-	skel f = find_skel (&proc_list, &sig);
-	if (f == NULL) {
-		simulated_send_error_msg (msg_response, reply_buff, ERR_RPC_UNREGISTERED_PROC);
-		free(reply_buff);
-		return ERR_RPC_UNREGISTERED_PROC;
-	}
-	void **args = (void**)malloc(sig.argLen*(sizeof(void*)));
-	if (args == NULL) {
-		simulated_send_error_msg (msg_response, reply_buff, ERR_RPC_OUT_OF_MEMORY);
-		free(reply_buff);
-		return ERR_RPC_OUT_OF_MEMORY;
-	}
-	void **args_origin = (void**)malloc(sig.argLen*(sizeof(void*)));
-	if (args_origin == NULL) {
-		simulated_send_error_msg (msg_response, reply_buff, ERR_RPC_OUT_OF_MEMORY);
-		free(reply_buff);
-		free(args);
-		return ERR_RPC_OUT_OF_MEMORY;
-	}
-	
-	msg_offset += (sig.argLen+1)*sizeof(int);
-	int response_len = 0, ret = unmarshall_args(sig.argLen, sig.argTypes, msg_offset, args);
-	if (ret == ERR_RPC_OUT_OF_MEMORY){
-		simulated_send_error_msg (msg_response, reply_buff, ERR_RPC_OUT_OF_MEMORY);
-		free(reply_buff);
-		free(args);
-		free(args_origin);
-		return ERR_RPC_OUT_OF_MEMORY;
-	}
-	// copy original args before envoking the procedure to avoid memory leaks
-	memcpy(args_origin, args, sig.argLen*(sizeof(void*)));
-	
-	DEBUG("Invoking the proc!  name:%s    skeleton:%p", sig.proc_name, (void*)f);
-	ret = f(sig.argTypes, args);
-	DEBUG ("Result of function call:%d    args[0]=%d", ret, *(int*)args[0]);
-	
-	if (ret) {	// function returned error
-		simulated_send_error_msg (msg_response, reply_buff, ERR_RPC_PROC_EXEC_FAILED);
-		free(reply_buff);
-		destroy_args (sig.argLen, args, args_origin);
-		return ERR_RPC_PROC_EXEC_FAILED;
-	}
-	response_len = sizeof(unsigned)+sizeof(int)+msg_len;
-	memcpy (reply_buff, msg_req, response_len);
-	*((int *)(reply_buff+sizeof(unsigned))) = EXECUTE_SUCCESS;
-	msg_offset = reply_buff+sizeof(unsigned)+sizeof(int)+(MAX_PROC_NAME_SIZE+1)*sizeof(char)
-				+sizeof(unsigned)+(sig.argLen+1)*sizeof(int);
-	// copy args
-	marshall_args (sig.argLen, sig.argTypes, msg_offset, args);
-	
-	//send the success message
-	memcpy (msg_response, reply_buff, response_len);
-	/*
-	*/
-	// free dynamic memory allocated
-	free(reply_buff);
-	destroy_args (sig.argLen, args, args_origin);
-	DEBUG("client_to_server is returning succesfully");
-	return ERR_RPC_SUCCESS;
 }
 
 int locate_server(char *msg, unsigned total_len, location *server_loc){
@@ -981,8 +902,6 @@ int rpcCall(char* name, int* argTypes, void** args) {
 		ERROR("rpcCall() is returning. rcv_response() failed...");
 		return ret;
 	}
-	
-	/*client_to_server (msg, msg_response);		// simulation*/
 	
 	// handle the response received
 	ret = handle_server_response (args, msg_response);
