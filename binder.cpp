@@ -352,6 +352,8 @@ void Binder::proc_registration(int sockFD, char * message){
 	    }
 
 	    cout << "send SUCCESS  <msg_type + msg_size + ERR_RPC_SUCCESS >" << endl;
+	    server_sockets.push_back(sockFD);
+
 	    int code = ERR_RPC_SUCCESS;
         sendResult(sockFD, REGISTER_SUCCESS, code);
 
@@ -400,13 +402,14 @@ int Binder::terminateServers(){
 	__INFO("");
 
 	int type = TERMINATE;
-	list<ProcLocation>::iterator list_it = server_queue.begin();
-	cout << "TERMINATE sent to " << list_it->socketFD << endl;
-	for(; list_it != server_queue.end(); list_it++){
-		int status = sendResult(list_it->socketFD, type, 0);
-		sleep(2);
+	vector<int>::iterator v_it = server_sockets.begin();
+	printList();
+	cout << "TERMINATE sent to " <<  *v_it << endl;
+	for(; v_it != server_sockets.end(); v_it++){
+		int status = sendResult(*v_it, type, 0);
+		// sleep(2);
 		
-		cout << "TERMINATE sent to " << list_it->socketFD << endl;
+		cout << "TERMINATE sent to " << *v_it << endl;
 
 		if(status < 0){
 			cerr << "ERROR: on terminating servers"<< endl; 			
@@ -415,6 +418,15 @@ int Binder::terminateServers(){
 	return TERMINATE_ALL;
 }
 
+
+void Binder::checkServers(int socketFD){
+	for(unsigned int i = 0; i < server_sockets.size(); i++){
+		if(server_sockets[i] == socketFD){
+			server_sockets.erase(server_sockets.begin() + i);
+			break;
+		}
+	}
+}
 
 
 // send LOC_SUCCESS to client with the server location
@@ -589,6 +601,8 @@ void Binder::start(){
                         close(connections[i]);
                         FD_CLR(connections[i], &readfds);
                         connections.erase(connections.begin() + i);
+                        // if this is server socket, then remove form vector
+                        checkServers(connections[i]);
                         continue;
                     }
                 }
@@ -623,6 +637,7 @@ void Binder::printMap(){
 
 
 void Binder::printList(){
+
   list<ProcLocation>::iterator list_it = server_queue.begin();
   for(;list_it != server_queue.end(); list_it++){
     cout << "   "

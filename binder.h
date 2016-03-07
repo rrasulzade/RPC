@@ -36,6 +36,7 @@ class Binder{
 	int binder_sockFD;
 	std::map<ProcSignature, std::list<ProcLocation> > sig_to_location;
 	std::list<ProcLocation> server_queue;
+	std::vector<int> server_sockets;
 
   public:
   	Binder();
@@ -53,6 +54,7 @@ class Binder{
   	void addToServerQueue(std::list<ProcLocation>& loc_set);
   	void addToServerQueue(ProcLocation& loc);
   	int terminateServers();
+	void checkServers(int socketFD);
 
 
   	void printList();
