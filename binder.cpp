@@ -408,14 +408,21 @@ int Binder::terminateServers(){
 
 // send LOC_SUCCESS to client with the server location
 int Binder::sendLOC_SUCC(int sockFD, msg_type type, ProcLocation* loc){
-    unsigned int msg_len = sizeof(type) + sizeof(ProcLocation);
-	char msg[msg_len+1];
-	
-	memcpy(msg, &type, sizeof(type));
-	memcpy(msg+sizeof(type), loc, sizeof(ProcLocation));
-	msg[msg_len] = '\0';
+	__INFO("");
 
-	int status = send(sockFD, msg, msg_len, 0);
+    unsigned int msg_len = sizeof(ProcLocation);	
+    unsigned int total_len = sizeof(unsigned int) + sizeof(type) + msg_len;
+
+	char msg[total_len+1];
+	
+	memset(msg, 0, total_len);	
+
+	memcpy(msg, &msg_len, sizeof(msg_len));
+	memcpy(msg+sizeof(msg_len), &type, sizeof(type));
+	memcpy(msg+sizeof(msg_len)+sizeof(type), loc, sizeof(ProcLocation));
+	msg[total_len] = '\0';
+
+	int status = send(sockFD, msg, total_len, 0);
 
     return status;
 }
@@ -424,14 +431,21 @@ int Binder::sendLOC_SUCC(int sockFD, msg_type type, ProcLocation* loc){
 // send LOC_FAILURE, REGISTER_FAILURE, REGISTER_SUCCESS and UNKNOWN
 // message types with return code
 int Binder::sendResult(int sockFD, msg_type type, int retCode){
-	unsigned int msg_len = sizeof(type) + sizeof(retCode);
-	char msg[msg_len+1];
+	__INFO("");
 
-	memcpy(msg, &type, sizeof(type));
-	memcpy(msg+sizeof(type), &retCode, sizeof(retCode));
-	msg[msg_len] = '\0';
+	unsigned int msg_len = sizeof(retCode);
+	unsigned int total_len = sizeof(unsigned int) + sizeof(type) + msg_len;
 
-	int status = send(sockFD, msg, msg_len, 0);
+	char msg[total_len+1];
+
+	memset(msg, 0, total_len);	
+
+	memcpy(msg, &msg_len, sizeof(msg_len));
+	memcpy(msg+sizeof(msg_len), &type, sizeof(type));
+	memcpy(msg+sizeof(msg_len)+sizeof(type), &retCode, sizeof(retCode));
+	msg[total_len] = '\0';
+
+	int status = send(sockFD, msg, total_len, 0);
 
 	return status;
 }
@@ -441,6 +455,8 @@ int Binder::sendResult(int sockFD, msg_type type, int retCode){
 // create socket, then bind binder_addr to socket
 // then listen for socket connections
 void Binder::setup_socket(){
+	__INFO("");
+
     sockaddr_in binder_sockaddr, sock_in;
     int status;
     int len = sizeof(sockaddr_in);
@@ -480,6 +496,8 @@ void Binder::setup_socket(){
 
 
 void Binder::start(){
+	__INFO("");
+
 	sockaddr_in connected_sockaddr;
     int connected_sockFD , status;
     int len = sizeof(sockaddr_in);
@@ -567,6 +585,8 @@ void Binder::start(){
 
 
 int main(int argc, const char * argv[]) {
+	__INFO("");
+	
     Binder binder;
     binder.start();
     return 0;
