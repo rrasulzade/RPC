@@ -139,7 +139,7 @@ int Binder::handle_message(int sockFD){
    	msg[msg_len] = '\0';  
 
 
-   	DEBUG("handle_message memory - msg_size:%d total_len:%d", msg_len, msg_len+sizeof(msg_len)+sizeof(msgType));
+   	DEBUG("handle_message memory - msg_size:%u total_len:%lu", msg_len, msg_len+sizeof(msg_len)+sizeof(msgType));
 
    	 // msgType = *(int*)(msg);
 
@@ -398,8 +398,6 @@ int Binder::terminateServers(){
 	__INFO("");
 
 	int type = TERMINATE;
-	unsigned int msg_len = 0;
-	int total_len = sizeof(unsigned int) + sizeof(int);
 	list<ProcLocation>::iterator list_it = server_queue.begin();
 	for(; list_it != server_queue.end(); list_it++){
 		int status = sendResult(list_it->socketFD, type, 0);
@@ -429,7 +427,7 @@ int Binder::sendLOC_SUCC(int sockFD, location loc){
 	memcpy(msg+sizeof(msg_len)+sizeof(type), &loc, sizeof(location));
 	msg[total_len] = '\0';
 
-	printf("send LOC_SUCCESS - msg_size:%d total_len:%d", msg_len, total_len);
+	printf("send LOC_SUCCESS - msg_size:%u total_len:%u", msg_len, total_len);
 
 	int status = send(sockFD, msg, total_len, 0);
 
@@ -454,7 +452,7 @@ int Binder::sendResult(int sockFD, int type, int retCode){
 	memcpy(msg+sizeof(msg_len)+sizeof(type), &retCode, sizeof(retCode));
 	msg[total_len] = '\0';
 
-	printf("sendResult - msg_size:%d total_len:%d", msg_len, total_len);
+	printf("sendResult - msg_size:%u total_len:%u", msg_len, total_len);
 
 	int status = send(sockFD, msg, total_len, 0);
 
