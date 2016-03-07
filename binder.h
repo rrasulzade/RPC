@@ -10,18 +10,6 @@
 #define 	TERMINATE_ALL		-500
 
 
-#define ARG_CHAR    1
-#define ARG_SHORT   2
-#define ARG_INT     3
-#define ARG_LONG    4
-#define ARG_DOUBLE  5
-#define ARG_FLOAT   6
-
-#define ARG_INPUT   31
-#define ARG_OUTPUT  30
-
-
-
 
 struct failure : public std::exception {
   const char* what() const throw() {return "FAILURE!";}
@@ -37,7 +25,7 @@ struct ProcSignature{
 
 struct ProcLocation{
 	location locationInfo;
-
+	int socketFD;
 	friend bool operator< (const ProcLocation& lhs, const ProcLocation& rhs);
 	friend bool operator==(const ProcLocation& lhs, const ProcLocation& rhs);	
 };
@@ -48,7 +36,6 @@ class Binder{
 	int binder_sockFD;
 	std::map<ProcSignature, std::list<ProcLocation> > sig_to_location;
 	std::list<ProcLocation> server_queue;
-	unsigned int next_prior_id;
 
   public:
   	Binder();

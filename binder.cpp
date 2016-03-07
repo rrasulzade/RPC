@@ -103,6 +103,8 @@ Binder::Binder(void){
 }
 
 Binder::~Binder(void){
+	__INFO("");
+
 	map<ProcSignature, list<ProcLocation> >::iterator map_it = sig_to_location.begin();
     for(; map_it != sig_to_location.end(); map_it++){
     	delete [] map_it->first.procInfo.argTypes;
@@ -114,6 +116,8 @@ Binder::~Binder(void){
 
 // receive message, 
 int Binder::handle_message(int sockFD){
+	__INFO("");
+
     unsigned int msg_len;
     msg_type msgType;
     char *msg;
@@ -159,6 +163,7 @@ int Binder::handle_message(int sockFD){
    	switch(msgType){
    		case REGISTER:
    			proc_registration(sockFD, msg);
+   			printMap();
    			break;
    		case LOC_REQUEST:
    			proc_location_request(sockFD, msg);
@@ -178,13 +183,15 @@ int Binder::handle_message(int sockFD){
 
 // handle requests from client that needs the server location
 void Binder::proc_location_request(int sockFD, char * message){
+	__INFO("");
+
 	ProcSignature proc;
 	memset(&proc, 0, sizeof(ProcSignature));
 
 	strncpy(proc.procInfo.proc_name, message, MAX_PROC_NAME_SIZE);
 	proc.procInfo.proc_name[MAX_PROC_NAME_SIZE] = '\0';
 
-	message += MAX_PROC_NAME_SIZE;
+	message += (MAX_PROC_NAME_SIZE+1);
 
 	// find length of argTypes
     int argLen = *(int*) message; 
@@ -222,7 +229,7 @@ void Binder::proc_location_request(int sockFD, char * message){
     		cout << proc.procInfo.proc_name <<  " Arglen: " <<  proc.procInfo.argLen <<" -> " << endl;
     		cout << "   "
 				 << server_location.locationInfo.s_id.addr.hostname << " "			
-	    	     << server_location.locationInfo.s_port << endl << endl;
+	    	     << ntohs(server_location.locationInfo.s_port) << endl << endl;
 
            sendLOC_SUCC(sockFD, LOC_SUCCESS, &server_location);     
            delete [] proc.procInfo.argTypes;     
@@ -243,6 +250,8 @@ void Binder::proc_location_request(int sockFD, char * message){
 }
 
 ProcLocation Binder::roundRobinServer(list<ProcLocation>& loc_set){
+	__INFO("");
+
 	if (loc_set.size() == 1){
 		return *(loc_set.begin());
 	}
@@ -263,6 +272,8 @@ ProcLocation Binder::roundRobinServer(list<ProcLocation>& loc_set){
 
 
 void Binder::proc_registration(int sockFD, char * message){
+	__INFO("");
+
 	ProcSignature proc;
 	ProcLocation loc;
 	
@@ -271,6 +282,7 @@ void Binder::proc_registration(int sockFD, char * message){
 
 	// read server identifier and server port
 	memcpy(&loc.locationInfo, message, sizeof(location));
+	loc.socketFD = sockFD;
 
 	char *p = message + sizeof(location);
 
@@ -280,7 +292,7 @@ void Binder::proc_registration(int sockFD, char * message){
 
 	// debug(proc.procInfo.proc_name);
 
-	p += MAX_PROC_NAME_SIZE;
+	p += (MAX_PROC_NAME_SIZE+1);
  	
  	// find length of argTypes
     int argLen = *(int*) p; 
@@ -362,6 +374,8 @@ void Binder::proc_registration(int sockFD, char * message){
 }
 
 void Binder::addToServerQueue(ProcLocation& loc){
+	__INFO("");
+
 	list<ProcLocation>::iterator list_it = server_queue.begin();
 	for(; list_it != server_queue.end(); list_it++){
 		if (*list_it == loc)
@@ -372,6 +386,8 @@ void Binder::addToServerQueue(ProcLocation& loc){
 }
 
 void Binder::addToServerQueue(list<ProcLocation>& loc_set){
+	__INFO("");
+
 	list<ProcLocation>::iterator set_it = loc_set.begin();
 	list<ProcLocation>::iterator list_it = server_queue.begin();
 	bool found;
@@ -392,10 +408,12 @@ void Binder::addToServerQueue(list<ProcLocation>& loc_set){
 
 // send TERMINATE message to all servers to stop
 int Binder::terminateServers(){
+	__INFO("");
+
 	int type = TERMINATE;
 	list<ProcLocation>::iterator list_it = server_queue.begin();
 	for(; list_it != server_queue.end(); list_it++){
-		int status = send(list_it->locationInfo.s_port, &type, sizeof(type), 0);
+		int status = send(list_it->socketFD, &type, sizeof(type), 0);
 		if(status < 0){
 			cerr << "ERROR: on terminating servers"<< endl; 			
 		}
@@ -581,12 +599,45 @@ void Binder::start(){
 
 
 
+
+
+
+
+void Binder::printMap(){
+  // debug("print");
+  map<ProcSignature, list<ProcLocation> >::iterator map_it = sig_to_location.begin();
+  for(; map_it != sig_to_location.end(); map_it++){
+    cout << map_it->first.procInfo.proc_name <<  " Arglen: " <<  map_it->first.procInfo.argLen <<" -> " << endl;
+    list<ProcLocation>:: iterator set_it = map_it->second.begin();
+    for(; set_it != map_it->second.end(); set_it++){
+      cout << "   "
+         << set_it->locationInfo.s_id.addr.hostname << " "      
+             << ntohs(set_it->locationInfo.s_port) << endl;
+    }
+    cout << endl;
+  }
+}
+
+
+void Binder::printList(){
+  list<ProcLocation>::iterator list_it = server_queue.begin();
+  for(;list_it != server_queue.end(); list_it++){
+    cout << "   "
+       << list_it->locationInfo.s_id.addr.hostname << " "     
+           << list_it->locationInfo.s_port << endl;
+  }
+}
+
+
+
+
+
 ////////////////////////////////////////////  MAIN   ///////////////////////////////////////////////////
 
 
 int main(int argc, const char * argv[]) {
 	__INFO("");
-	
+
     Binder binder;
     binder.start();
     return 0;
