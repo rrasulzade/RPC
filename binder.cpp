@@ -352,7 +352,9 @@ void Binder::proc_registration(int sockFD, char * message){
 	    }
 
 	    cout << "send SUCCESS  <msg_type + msg_size + ERR_RPC_SUCCESS >" << endl;
-	    server_sockets.push_back(sockFD);
+	    if(!isServer(sockFD)){
+		    server_sockets.push_back(sockFD);
+	    }
 
 	    int code = ERR_RPC_SUCCESS;
         sendResult(sockFD, REGISTER_SUCCESS, code);
@@ -418,6 +420,15 @@ int Binder::terminateServers(){
 	return TERMINATE_ALL;
 }
 
+
+bool Binder::isServer(int socketFD){
+	for(unsigned int i = 0; i < server_sockets.size(); i++){
+		if(server_sockets[i] == socketFD){
+			return true;
+		}
+	}
+	return false;
+}
 
 void Binder::checkServers(int socketFD){
 	for(unsigned int i = 0; i < server_sockets.size(); i++){
@@ -601,6 +612,7 @@ void Binder::start(){
                         close(connections[i]);
                         FD_CLR(connections[i], &readfds);
                         connections.erase(connections.begin() + i);
+
                         // if this is server socket, then remove form vector
                         checkServers(connections[i]);
                         continue;
