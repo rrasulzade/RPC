@@ -429,7 +429,7 @@ int Binder::sendLOC_SUCC(int sockFD, location loc){
 	memcpy(msg+sizeof(msg_len)+sizeof(type), &loc, sizeof(location));
 	msg[total_len] = '\0';
 
-	DEBUG("send LOC_SUCCESS - msg_size:%d total_len:%d", msg_len, total_len);
+	printf("send LOC_SUCCESS - msg_size:%d total_len:%d", msg_len, total_len);
 
 	int status = send(sockFD, msg, total_len, 0);
 
@@ -454,7 +454,7 @@ int Binder::sendResult(int sockFD, int type, int retCode){
 	memcpy(msg+sizeof(msg_len)+sizeof(type), &retCode, sizeof(retCode));
 	msg[total_len] = '\0';
 
-	DEBUG("sendResult - msg_size:%d total_len:%d", msg_len, total_len);
+	printf("sendResult - msg_size:%d total_len:%d", msg_len, total_len);
 
 	int status = send(sockFD, msg, total_len, 0);
 
