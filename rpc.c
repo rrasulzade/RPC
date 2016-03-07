@@ -6,7 +6,7 @@
 
 #define _BSD_SOURCE
 
-#define	NUM_THREADS		128
+#define	NUM_THREADS		1
 
 #include <pthread.h>
 #include <arpa/inet.h>
@@ -91,7 +91,7 @@ int create_binder_sock(){
 	char *env = getenv("BINDER_ADDRESS");
 	if (env == NULL) {
 		DEBUG("ERROR: NULL POINTER in env[addr] variable! Exiting...\n");
-		return ERR_RPC_SOCKET_FAILED;
+		return ERR_RPC_ENV_ADDR_NULL;
 	}
 	
 	struct hostent *he = gethostbyname(env);
@@ -102,13 +102,13 @@ int create_binder_sock(){
 	env = getenv("BINDER_PORT");
 	if (env == NULL) {
 		DEBUG("ERROR: NULL POINTER in env[port] variable! Exiting...\n");
-		return -1;
+		return ERR_RPC_ENV_PORT_NULL;
 	}
 	binder.sin_port = htons (atoi(env));
 	
 	if (connect (binder_sock, (struct sockaddr *)&binder, sizeof(binder)) < 0) {
 		DEBUG("ERROR: Could not connect to the binder! Exiting...\n");
-		return -1;
+		return ERR_RPC_SOCKET_FAILED;
 	}
 	
 	return ERR_RPC_SUCCESS;
@@ -394,7 +394,7 @@ int rpcInit() {
 		int ret = pthread_create (&worker_threads[i], NULL, worker_code, NULL);
 		if (ret < 0) {
 			DEBUG("ERROR: Could not create a worker thread! Exiting...\n");
-			return -1;
+			return ERR_RPC_THREAD_NOT_CREATED;
 		}
 	}
 	return ERR_RPC_SUCCESS;
