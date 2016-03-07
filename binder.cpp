@@ -401,6 +401,7 @@ int Binder::terminateServers(){
 
 	int type = TERMINATE;
 	list<ProcLocation>::iterator list_it = server_queue.begin();
+	cout << "TERMINATE sent to " << list_it->socketFD << endl;
 	for(; list_it != server_queue.end(); list_it++){
 		int status = sendResult(list_it->socketFD, type, 0);
 		sleep(2);
