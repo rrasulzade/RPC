@@ -757,8 +757,10 @@ int locate_server(char *msg, unsigned total_len, location *server_loc){
 	}
 	
 	char *rcv_buff = malloc(msg_len*sizeof(char));
-	if (rcv_buff == NULL) return ERR_RPC_OUT_OF_MEMORY;
-	
+	if (rcv_buff == NULL){
+		ERROR("ERROR: OUT_OF_MEMORY");
+		return ERR_RPC_OUT_OF_MEMORY;
+	}
 	bytesRcvd = recv(binder_sock, &rcv_buff, msg_len, 0);
 	if (bytesRcvd < 0) {
 		ERROR("ERROR: bytes rcvd is negative!");
@@ -767,12 +769,15 @@ int locate_server(char *msg, unsigned total_len, location *server_loc){
 	}
 	
 	if (msg_type == LOC_FAILURE) {
+		DEBUG("locate_server() : LOC_FAILURE");
 		ret_code = *((int *)(rcv_buff));
 	}
 	else if (msg_type != LOC_SUCCESS) {
+		DEBUG("locate_server() : UNEXPECTED_MSG_TYPE");
 		ret_code = ERR_RPC_UNEXPECTED_MSG_TYPE;
 	}
 	else {
+		DEBUG("locate_server() : SUCCESSFUL execution");
 		memcpy(server_loc, rcv_buff, sizeof(location));
 	}
 	
