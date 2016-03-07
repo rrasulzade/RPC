@@ -81,26 +81,10 @@ bool operator==(const ProcLocation& lhs, const ProcLocation& rhs){
 }
 
 
-// bool operator< (const ProcLocation& lhs, const ProcLocation& rhs){
-
-	// cout << "==Loc==2 " << lhs.locationInfo.s_id.addr.hostname << " " << rhs.locationInfo.s_id.addr.hostname << endl;
-
-
-	// if(lhs.prior_id >= rhs.prior_id){
-	// 	return false;
-	// }
-	// return true;
-// }
-
-
-
 ///////////////////////////////////  Binder  ////////////////////////////////////////////
 
 
-
-Binder::Binder(void){
-	// next_prior_id = 0;
-}
+Binder::Binder(void){}
 
 Binder::~Binder(void){
 	__INFO("");
@@ -114,7 +98,8 @@ Binder::~Binder(void){
 
 
 
-// receive message, 
+// handle requests from Server and Client
+// send appropriate result back to sender
 int Binder::handle_message(int sockFD){
 	__INFO("");
 
@@ -124,14 +109,14 @@ int Binder::handle_message(int sockFD){
      
     // receive message len
     int status = recv(sockFD, &msg_len, sizeof(msg_len), 0);
-    if(status < 0){
+    if(status <= 0){
     	cerr << "ERROR: on receiving message length" << endl;
     	return status;
    	}
 
    	// receive message type
    	status = recv(sockFD, &msgType, sizeof(msgType), 0);
-   	if(status < 0){
+   	if(status <= 0){
     	cerr << "ERROR: on receiving message type" << endl;
     	return status;
    	}
@@ -146,19 +131,23 @@ int Binder::handle_message(int sockFD){
 
 	// receive message 
 	status = recv(sockFD, msg, msg_len, 0);				    
-	if(status < 0){  
+	if(status <= 0){  
     	cerr << "ERROR: on receiving message" << endl;
+    	delete msg;
     	return status;
    	}
    	msg[msg_len] = '\0';  
 
+
+   	DEBUG("handle_message memory - msg_size:%d total_len:%d", msg_len, msg_len+sizeof(msg_len)+sizeof(msgType));
+
    	 // msgType = *(int*)(msg);
 
     // connection is closed
-   	if(status == 0){
-   		delete msg;
-   		return status;
-   	}
+   	// if(status == 0){
+   	// 	delete msg;
+   	// 	return status;
+   	// }
 
    	switch(msgType){
    		case REGISTER:
@@ -191,7 +180,7 @@ void Binder::proc_location_request(int sockFD, char * message){
 	strncpy(proc.procInfo.proc_name, message, MAX_PROC_NAME_SIZE);
 	proc.procInfo.proc_name[MAX_PROC_NAME_SIZE] = '\0';
 
-	message += (MAX_PROC_NAME_SIZE+1);
+	message += (MAX_PROC_NAME_SIZE+1)*sizeof(char);
 
 	// find length of argTypes
     int argLen = *(int*) message; 
@@ -217,6 +206,8 @@ void Binder::proc_location_request(int sockFD, char * message){
 		if((proc.procInfo.argTypes[i] & 0x0000ffff) > 0)
 			proc.procInfo.argTypes[i] = (proc.procInfo.argTypes[i] & 0xffff0000) + 0x00000001;
 	}
+
+	
 
 	map<ProcSignature, list<ProcLocation> >::iterator map_it;
     map_it = sig_to_location.find(proc);
@@ -292,7 +283,7 @@ void Binder::proc_registration(int sockFD, char * message){
 
 	// debug(proc.procInfo.proc_name);
 
-	p += (MAX_PROC_NAME_SIZE+1);
+	p += (MAX_PROC_NAME_SIZE+1)*sizeof(char);
  	
  	// find length of argTypes
     int argLen = *(int*) p; 
@@ -323,8 +314,6 @@ void Binder::proc_registration(int sockFD, char * message){
 
     map<ProcSignature, list<ProcLocation> >::iterator map_it;
     map_it = sig_to_location.find(proc);
-
-    // debug("Data Parsed");
 
     // if this server has already registered this procedure, 
     // override the previous procedure
@@ -357,9 +346,7 @@ void Binder::proc_registration(int sockFD, char * message){
 	    	// no such entry is found, add new one to database
 	   		list<ProcLocation> loc_set;
 	   		loc_set.push_back(loc); 
-	    	sig_to_location.insert(pair<ProcSignature, list<ProcLocation> >(proc, loc_set));
-
-	    	// debug("Add new entry");	    		
+	    	sig_to_location.insert(pair<ProcSignature, list<ProcLocation> >(proc, loc_set));    		
 	    }
 
 	    cout << "send SUCCESS  <msg_type + msg_size + ERR_RPC_SUCCESS >" << endl;
@@ -411,14 +398,15 @@ int Binder::terminateServers(){
 	__INFO("");
 
 	int type = TERMINATE;
+	unsigned int msg_len = 0;
+	int total_len = sizeof(unsigned int) + sizeof(int);
 	list<ProcLocation>::iterator list_it = server_queue.begin();
 	for(; list_it != server_queue.end(); list_it++){
-		int status = send(list_it->socketFD, &type, sizeof(type), 0);
+		int status = sendResult(list_it->socketFD, type, 0);
 		if(status < 0){
 			cerr << "ERROR: on terminating servers"<< endl; 			
 		}
 	}
-
 	return TERMINATE_ALL;
 }
 
@@ -427,6 +415,7 @@ int Binder::terminateServers(){
 // send LOC_SUCCESS to client with the server location
 int Binder::sendLOC_SUCC(int sockFD, location loc){
 	__INFO("");
+
 	int type = LOC_SUCCESS;
     unsigned int msg_len = sizeof(location);	
     unsigned int total_len = sizeof(unsigned int) + sizeof(type) + msg_len;
@@ -440,13 +429,15 @@ int Binder::sendLOC_SUCC(int sockFD, location loc){
 	memcpy(msg+sizeof(msg_len)+sizeof(type), &loc, sizeof(location));
 	msg[total_len] = '\0';
 
+	DEBUG("send LOC_SUCCESS - msg_size:%d total_len:%d", msg_len, total_len);
+
 	int status = send(sockFD, msg, total_len, 0);
 
     return status;
 }
 
 
-// send LOC_FAILURE, REGISTER_FAILURE, REGISTER_SUCCESS and UNKNOWN
+// send LOC_FAILURE, REGISTER_FAILURE, REGISTER_SUCCESS, TERMINATE and UNKNOWN
 // message types with return code
 int Binder::sendResult(int sockFD, int type, int retCode){
 	__INFO("");
@@ -462,6 +453,8 @@ int Binder::sendResult(int sockFD, int type, int retCode){
 	memcpy(msg+sizeof(msg_len), &type, sizeof(type));
 	memcpy(msg+sizeof(msg_len)+sizeof(type), &retCode, sizeof(retCode));
 	msg[total_len] = '\0';
+
+	DEBUG("sendResult - msg_size:%d total_len:%d", msg_len, total_len);
 
 	int status = send(sockFD, msg, total_len, 0);
 
