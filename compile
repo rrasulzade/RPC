@@ -1,0 +1,5 @@
+#!/bin/bash
+
+
+gcc -L. client1.c -lrpc -pthread -o client
+gcc -L. server_functions.c server_function_skels.c server.c -lrpc -pthread -o server
