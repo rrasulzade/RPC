@@ -219,7 +219,7 @@ void destroy_args (unsigned arglen, void **args, void **args_origin) {
 	DEBUG("destroy_args is called");
 	for (unsigned i = 0; i < arglen; i++) {
 		// deallocate the memory allocated in skeleton
-		if (args[i] != args_origin[i]) free(args[i]);
+		//if (args[i] != args_origin[i]) free(args[i]);
 		
 		// eallocate the memory allocated for procedure invocation
 		free(args_origin[i]);
@@ -331,9 +331,11 @@ int handle_request (int sock){
 	DEBUG ("Result of function call:%d    args[0]=%d", ret_code, *(int*)args[0]);
 	
 	if (ret_code) {	// function returned error
+		ERROR("handle_request() : skeleton returned error! ret=%d", ret_code);
 		send_error_msg (msg_req, ERR_RPC_PROC_EXEC_FAILED, sock);
 		free(msg_req);
 		destroy_args (sig.argLen, args, args_origin);
+		ERROR("handle_request is returning...ERR_RPC_PROC_EXEC_FAILED");
 		return ERR_RPC_PROC_EXEC_FAILED;
 	}
 	response_len = sizeof(unsigned)+sizeof(int)+msg_len;
@@ -364,6 +366,7 @@ void *worker_code (void *ptr){
 	int sock = 0, ret_code = 0;
 	
 	while (1){
+		DEBUG("worker_code: popping socket...");
 		ret_code = queue_pop (&intQ, &sock);
 		DEBUG("worker_code: popped socket:%d", sock);
 		if (ret_code != ERR_QUEUE_SUCCESS) continue;
@@ -415,6 +418,7 @@ int send_termination_request (){
 	DEBUG("send_termination_request() is called...");
 	char *msg = malloc(8*sizeof(char));
 	if (msg == NULL) {
+		ERROR("ERR_RPC_OUT_OF_MEMORY");
 		return ERR_RPC_OUT_OF_MEMORY;
 	}
 	memset(msg, 0, 8*sizeof(char));
@@ -524,7 +528,9 @@ int rpcExecute(){
 	
 	while (1){
 		highest_sock = select_list_setup (&fds);
+		DEBUG("select() is called!");
 		num_active_socks = select(highest_sock+1, &fds, 0, 0, 0);
+		DEBUG("select() returned!");
 		if (num_active_socks < 0) {
 			ERROR("ERROR: Select returned error! No active sockets! Exiting...");
 			return ERR_RPC_SOCKET_INACTIVE;

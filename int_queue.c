@@ -78,12 +78,15 @@ int queue_front (intQueue *Q, int *data){
 
 int queue_pop (intQueue *Q, int *data){
 	pthread_mutex_lock(&Qmutex);
-	struct node *del_node = Q->head;
 	
-	if (Q->size == 0) {
+	if (Q->size == 0){
 		pthread_cond_wait (&CV, &Qmutex);
 		DEBUG("queue_pop():  worker is woken up!");
-		if (Q->size == 0) return ERR_QUEUE_ERROR;
+	}
+	
+	struct node *del_node = Q->head;	
+	if (Q->size == 0) {
+		return ERR_QUEUE_ERROR;
 	}
 	else if (Q->size == 1) {
 		Q->head = Q->tail = NULL;
