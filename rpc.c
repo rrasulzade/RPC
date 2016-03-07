@@ -42,16 +42,6 @@ pthread_t worker_threads[NUM_THREADS];
 
 
 
-// Build the FD_SET for the select system call. Returns highest sock
-int select_list_setup (fd_set *fds) {
-	DEBUG("select_list_setup is called");
-	FD_ZERO(fds);
-	FD_SET(listening_sock, fds);
-	FD_SET(binder_sock, fds);
-	DEBUG("select_list_setup is returning");
-	return ((listening_sock > binder_sock) ? listening_sock : binder_sock);
-}
-
 
 int create_listening_sock(){
 	DEBUG("create_listening_sock is called");
@@ -79,7 +69,7 @@ int create_listening_sock(){
 	// start listening to be able to accept connection requests
 	listen (listening_sock, SOMAXCONN);
 	
-	DEBUG("create_listening_sock is returning");
+	DEBUG("create_listening_sock is returning. listening_sock=%d", listening_sock);
 	return ERR_RPC_SUCCESS;
 }
 
@@ -116,7 +106,7 @@ int create_binder_sock(){
 		return ERR_RPC_SOCKET_FAILED;
 	}
 	
-	DEBUG("create_binder_sock is returning");
+	DEBUG("create_binder_sock is returning. binder_sock=%d", binder_sock);
 	return ERR_RPC_SUCCESS;
 }
 
@@ -375,6 +365,7 @@ void *worker_code (void *ptr){
 	
 	while (1){
 		ret_code = queue_pop (&intQ, &sock);
+		DEBUG("worker_code: popped socket:%d", sock);
 		if (ret_code != ERR_QUEUE_SUCCESS) continue;
 		
 		
@@ -481,6 +472,16 @@ int check_termination_protocol(int *termination){
 	if (msg_type == TERMINATE) *termination = 1;
 	DEBUG("check_termination_protocol () is returning...");
 	return ERR_RPC_SUCCESS;
+}
+
+// Build the FD_SET for the select system call. Returns highest sock
+int select_list_setup (fd_set *fds) {
+	DEBUG("select_list_setup is called");
+	FD_ZERO(fds);
+	FD_SET(listening_sock, fds);
+	FD_SET(binder_sock, fds);
+	DEBUG("select_list_setup is returning: %d", ((listening_sock > binder_sock) ? listening_sock : binder_sock));
+	return ((listening_sock > binder_sock) ? listening_sock : binder_sock);
 }
 
 // process sockets that are active
@@ -757,30 +758,33 @@ int locate_server(char *msg, unsigned total_len, location *server_loc){
 	}
 	
 	char *rcv_buff = malloc(msg_len*sizeof(char));
+	memset(rcv_buff, 0, msg_len*sizeof(char));
+	
 	if (rcv_buff == NULL){
 		ERROR("ERROR: OUT_OF_MEMORY");
 		return ERR_RPC_OUT_OF_MEMORY;
 	}
-	bytesRcvd = recv(binder_sock, &rcv_buff, msg_len, 0);
+	bytesRcvd = recv(binder_sock, rcv_buff, msg_len, 0);
 	if (bytesRcvd < 0) {
 		ERROR("ERROR: bytes rcvd is negative!");
 		free(rcv_buff);
 		return ERR_RPC_SOCKET_FAILED;
 	}
+	DEBUG("rcv_buff=%p\tbytesRcvd=%d", rcv_buff, bytesRcvd);
 	
 	if (msg_type == LOC_FAILURE) {
-		DEBUG("locate_server() : LOC_FAILURE");
+		ERROR("locate_server() : LOC_FAILURE");
 		ret_code = *((int *)(rcv_buff));
 	}
 	else if (msg_type != LOC_SUCCESS) {
-		DEBUG("locate_server() : UNEXPECTED_MSG_TYPE");
+		ERROR("locate_server() : UNEXPECTED_MSG_TYPE");
 		ret_code = ERR_RPC_UNEXPECTED_MSG_TYPE;
 	}
 	else {
 		DEBUG("locate_server() : SUCCESSFUL execution");
 		memcpy(server_loc, rcv_buff, sizeof(location));
 	}
-	
+	DEBUG("free...");
 	free(rcv_buff);
 	DEBUG("locate_server() is returning...");
 	return ret_code;
@@ -823,7 +827,7 @@ int send_request (int *server_sock, char *msg, unsigned total_msg_len){
 
 int rcv_response (int *server_sock, char *msg_response, unsigned total_msg_len){
 	DEBUG("rcv_response() is called...");
-	int bytesRcvd = recv(*server_sock, &msg_response, total_msg_len, 0);
+	int bytesRcvd = recv(*server_sock, msg_response, total_msg_len, 0);
 	if (bytesRcvd < 0){
 		ERROR("rcv_response() is returning. Socket failed...");
 		return ERR_RPC_SOCKET_FAILED;

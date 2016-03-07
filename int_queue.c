@@ -82,6 +82,7 @@ int queue_pop (intQueue *Q, int *data){
 	
 	if (Q->size == 0) {
 		pthread_cond_wait (&CV, &Qmutex);
+		DEBUG("queue_pop():  worker is woken up!");
 		if (Q->size == 0) return ERR_QUEUE_ERROR;
 	}
 	else if (Q->size == 1) {
