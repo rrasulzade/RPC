@@ -487,7 +487,7 @@ int check_termination_protocol(int *termination){
 	}
 	
 	if (msg_type != TERMINATE){
-		DEBUG("check_termination_protocol () is returning... ERR_RPC_UNEXPECTED_MSG_TYPE msg_len=%d msg_type=%d reason_code=%d", msg_len, msg_type, reason_code);
+		DEBUG("check_termination_protocol () is returning...ERR_RPC_UNEXPECTED_MSG_TYPE msg_len=%d msg_type=%d reason_code=%d", msg_len, msg_type, reason_code);
 		for (volatile int i = 0; 1==1; i++);		// crash();
 		return ERR_RPC_UNEXPECTED_MSG_TYPE;
 	}
