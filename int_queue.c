@@ -4,23 +4,43 @@
 
 
 #include <stdlib.h>
+#include <pthread.h>
 #include "debug.h"
 #include "int_queue.h"
 
 
+/*
+pthread_mutex_lock(&Qmutex);
+pthread_cond_wait (&CV, &Qmutex);
+*/
+
+
+// mutex for inserting/removing data from/into queue
+pthread_mutex_t Qmutex = PTHREAD_MUTEX_INITIALIZER;
+
+// For syncronization when the queue is empty
+pthread_cond_t CV		= PTHREAD_COND_INITIALIZER;
+
 
 void queue_init (intQueue *Q){
+	pthread_mutex_lock(&Qmutex);
 	Q->size = 0;
 	Q->head = Q->tail = NULL;
+	pthread_mutex_unlock(&Qmutex);
 }
 
 int queue_empty (intQueue *Q){
-	return Q->size == 0;
+	pthread_mutex_lock(&Qmutex);
+	int ret = (Q->size == 0);
+	pthread_mutex_unlock(&Qmutex);
+	return ret;
 }
 
 int queue_push (intQueue *Q, int data){
+	pthread_mutex_lock(&Qmutex);
 	struct node *newnode = malloc(sizeof(struct node));
 	if (newnode == NULL) {
+		pthread_mutex_unlock(&Qmutex);
 		return ERR_QUEUE_ERROR;
 	}
 	
@@ -32,6 +52,7 @@ int queue_push (intQueue *Q, int data){
 			DEBUG("WARNING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! (head != NULL || tail != NULL),  BUT size = 0");
 		}	
 		Q->head = Q->tail = newnode;
+		pthread_cond_signal (&CV);
 	}
 	else {
 		Q->tail->next = newnode;
@@ -39,23 +60,29 @@ int queue_push (intQueue *Q, int data){
 	}
 	
 	Q->size++;
+	pthread_mutex_unlock(&Qmutex);
 	return ERR_QUEUE_SUCCESS;
 }
 
 int queue_front (intQueue *Q, int *data){
+	pthread_mutex_lock(&Qmutex);
 	if (Q->size == 0) {
+		pthread_mutex_unlock(&Qmutex);
 		return ERR_QUEUE_ERROR;
 	}
 	
 	*data = Q->head->data;
+	pthread_mutex_unlock(&Qmutex);
 	return ERR_QUEUE_SUCCESS;
 }
 
-int queue_pop (intQueue *Q){
+int queue_pop (intQueue *Q, int *data){
+	pthread_mutex_lock(&Qmutex);
 	struct node *del_node = Q->head;
 	
 	if (Q->size == 0) {
-		return ERR_QUEUE_ERROR;
+		pthread_cond_wait (&CV, &Qmutex);
+		if (Q->size == 0) return ERR_QUEUE_ERROR;
 	}
 	else if (Q->size == 1) {
 		Q->head = Q->tail = NULL;
@@ -64,12 +91,15 @@ int queue_pop (intQueue *Q){
 		Q->head = Q->head->next;
 	}
 	
+	*data = del_node->data;
 	free(del_node);
 	Q->size--;
+	pthread_mutex_unlock(&Qmutex);
 	return ERR_QUEUE_SUCCESS;
 }
 
 int queue_reset (intQueue *Q){
+	pthread_mutex_lock(&Qmutex);
 	struct node *cur = Q->head, *node_del;
 	while (cur != NULL){
 		node_del = cur;
@@ -77,5 +107,6 @@ int queue_reset (intQueue *Q){
 		free(node_del);
 	}
 	queue_init (Q);
+	pthread_mutex_unlock(&Qmutex);
 	return 0;
 }

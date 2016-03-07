@@ -28,7 +28,7 @@ int queue_push (intQueue *Q, int data);
 
 int queue_front (intQueue *Q, int *data);
 
-int queue_pop (intQueue *Q);
+int queue_pop (intQueue *Q, int *data);
 
 int queue_reset (intQueue *Q);
 

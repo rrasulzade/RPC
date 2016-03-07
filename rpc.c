@@ -36,7 +36,6 @@ int binder_sock;
 // this is critical region
 intQueue intQ;
 
-
 // worker threads to be able to handle multiple requests at a time
 pthread_t worker_threads[NUM_THREADS];
 
@@ -363,9 +362,9 @@ void *worker_code (void *ptr){
 	int sock = 0, ret_code = 0;
 	
 	while (1){
-		ret_code = queue_front (&intQ, &sock);
+		ret_code = queue_pop (&intQ, &sock);
 		if (ret_code != ERR_QUEUE_SUCCESS) continue;
-		queue_pop (&intQ);
+		
 		
 		// if sock == -1, then termination signal has been sent.
 		if (sock == -1) break;
