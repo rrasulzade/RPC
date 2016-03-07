@@ -275,6 +275,8 @@ void Binder::proc_registration(int sockFD, char * message){
 	memcpy(&loc.locationInfo, message, sizeof(location));
 	loc.socketFD = sockFD;
 
+	cout << "SERVER SockFD " << sockFD << endl;
+
 	char *p = message + sizeof(location);
 
 	// read procedure name
@@ -401,6 +403,10 @@ int Binder::terminateServers(){
 	list<ProcLocation>::iterator list_it = server_queue.begin();
 	for(; list_it != server_queue.end(); list_it++){
 		int status = sendResult(list_it->socketFD, type, 0);
+		sleep(2);
+		
+		cout << "TERMINATE sent to " << list_it->socketFD << endl;
+
 		if(status < 0){
 			cerr << "ERROR: on terminating servers"<< endl; 			
 		}
@@ -528,8 +534,9 @@ void Binder::start(){
 	    int max_fd = binder_sockFD;
 	    for(unsigned int i=0; i < connections.size(); i++){
 	    	FD_SET(connections[i], &readfds);
-	    	if(connections[i] > max_fd)
+	    	if(connections[i] > max_fd){
 	    		max_fd = connections[i];
+	    	}
 	    }
 
         // block here and wait for connection
