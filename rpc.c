@@ -472,16 +472,19 @@ int check_termination_protocol(int *termination){
 	// If yes terminate by setting *termination to 1, resume execution otherwise.
 	int bytesRcvd, msg_type, reason_code; unsigned msg_len;
 	bytesRcvd = recv(binder_sock, &msg_len, 4, 0);
+	DEBUG("bytesRcvd=%d", bytesRcvd);
 	if (bytesRcvd < 0) {
 		ERROR("ERROR: bytes rcvd is negative!");
 	}
 	
 	bytesRcvd = recv(binder_sock, &msg_type, 4, 0);
+	DEBUG("bytesRcvd=%d", bytesRcvd);
 	if (bytesRcvd < 0) {
 		ERROR("ERROR: bytes rcvd is negative!");
 	}
 	
 	bytesRcvd = recv(binder_sock, &reason_code, 4, 0);
+	DEBUG("bytesRcvd=%d", bytesRcvd);
 	if (bytesRcvd < 0) {
 		ERROR("ERROR: bytes rcvd is negative!");
 	}
