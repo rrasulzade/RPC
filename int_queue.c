@@ -111,7 +111,8 @@ int queue_reset (intQueue *Q){
 		cur = cur->next;
 		free(node_del);
 	}
-	queue_init (Q);
+	Q->size = 0;
+	Q->head = Q->tail = NULL;
 	DEBUG("queue_reset() is returning...");
 	pthread_mutex_unlock(&Qmutex);
 	return 0;
