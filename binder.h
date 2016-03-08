@@ -15,9 +15,12 @@ struct failure : public std::exception {
   const char* what() const throw() {return "FAILURE!";}
 };
 
+struct success : public std::exception {
+  const char* what() const throw() {return "SUCCESS!";}
+};
+
 struct ProcSignature{
 	proc_sig procInfo;
-
 	friend bool operator< (const ProcSignature& lhs, const ProcSignature& rhs);
 	friend bool operator==(const ProcSignature& lhs, const ProcSignature& rhs);
 };

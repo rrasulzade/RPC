@@ -356,16 +356,17 @@ void Binder::proc_registration(int sockFD, char * message){
 		    server_sockets.push_back(sockFD);
 	    }
 
-	    int code = ERR_RPC_SUCCESS;
-        sendResult(sockFD, REGISTER_SUCCESS, code);
+	    // int code = ERR_RPC_SUCCESS;
+        sendResult(sockFD, REGISTER_SUCCESS, ERR_RPC_SUCCESS);
 
 	}catch(failure& e){
 		cout << "send FAILURE  <msg_type + msg_size + ERR_RPC_PROC_RE_REG >" << endl;
-		int code = ERR_RPC_PROC_RE_REG;
-        sendResult(sockFD, REGISTER_FAILURE, code);
+		// int code = ERR_RPC_PROC_RE_REG;
+        sendResult(sockFD, REGISTER_FAILURE, ERR_RPC_PROC_RE_REG);
 	}
 }
 
+// adds the given server location to the server queue
 void Binder::addToServerQueue(ProcLocation& loc){
 	__INFO("");
 
@@ -378,21 +379,16 @@ void Binder::addToServerQueue(ProcLocation& loc){
 	server_queue.push_back(loc);
 }
 
+// adds the first and the second servers on the set of locations 
+// mapped by the same procedure to the server queue
 void Binder::addToServerQueue(list<ProcLocation>& loc_set){
 	__INFO("");
 
 	list<ProcLocation>::iterator set_it = loc_set.begin();
 	list<ProcLocation>::iterator list_it = server_queue.begin();
-	bool found;
 	for(; set_it != loc_set.end(); set_it++){
-		found = false;
-		for(; list_it != server_queue.end(); list_it++){
-			if(*set_it == *list_it){
-				found = true;
-				break;
-			}
-		}
-		if(!found)
+		for(; list_it != server_queue.end() && *set_it != *list_it; list_it++);
+		if(list_it == server_queue.end())
 			server_queue.push_back(*set_it);
 	}
 }
@@ -421,6 +417,7 @@ int Binder::terminateServers(){
 }
 
 
+// check whether the given socket is in vector of active server sockets
 bool Binder::isServer(int socketFD){
 	for(unsigned int i = 0; i < server_sockets.size(); i++){
 		if(server_sockets[i] == socketFD){
@@ -430,6 +427,9 @@ bool Binder::isServer(int socketFD){
 	return false;
 }
 
+
+// check whether the given socket is in vector of active server sockets
+// if so erase that entry from the vector
 void Binder::checkServers(int socketFD){
 	for(unsigned int i = 0; i < server_sockets.size(); i++){
 		if(server_sockets[i] == socketFD){
@@ -457,7 +457,7 @@ int Binder::sendLOC_SUCC(int sockFD, location loc){
 	memcpy(msg+sizeof(msg_len)+sizeof(type), &loc, sizeof(location));
 	msg[total_len] = '\0';
 
-	printf("send LOC_SUCCESS - msg_size:%u total_len:%u", msg_len, total_len);
+	printf("send LOC_SUCCESS - msg_size:%u total_len:%u \n", msg_len, total_len);
 
 	int status = send(sockFD, msg, total_len, 0);
 
@@ -482,7 +482,7 @@ int Binder::sendResult(int sockFD, int type, int retCode){
 	memcpy(msg+sizeof(msg_len)+sizeof(type), &retCode, sizeof(retCode));
 	msg[total_len] = '\0';
 
-	printf("sendResult - msg_size:%u total_len:%u", msg_len, total_len);
+	printf("sendResult - msg_size:%u total_len:%u\n", msg_len, total_len);
 
 	int status = send(sockFD, msg, total_len, 0);
 
@@ -613,7 +613,7 @@ void Binder::start(){
                         FD_CLR(connections[i], &readfds);
                         connections.erase(connections.begin() + i);
 
-                        // if this is server socket, then remove form vector
+                        // if this is server socket, remove from vector of active server socket
                         checkServers(connections[i]);
                         continue;
                     }
