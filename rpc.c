@@ -572,7 +572,7 @@ int rpcExecute(){
 	delete_all (&proc_list);
 	
 	// if there is something left in the queue, then clean
-	// queue_reset (&intQ);
+	queue_reset (&intQ);
 	DEBUG("rpcExecute() is returning...");
 	return 0;
 }
