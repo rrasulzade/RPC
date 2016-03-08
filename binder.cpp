@@ -133,7 +133,7 @@ int Binder::handle_message(int sockFD){
 	status = recv(sockFD, msg, msg_len, 0);				    
 	if(status <= 0){  
     	cerr << "ERROR: on receiving message" << endl;
-    	delete msg;
+    	delete [] msg;
     	return status;
    	}
    	msg[msg_len] = '\0';  
@@ -164,7 +164,7 @@ int Binder::handle_message(int sockFD){
    			status = sendResult(sockFD, UNKNOWN, ERR_RPC_UNEXPECTED_MSG_TYPE); 	
    	}
 
-    delete msg;
+    delete [] msg;
     return status;
 }
 
