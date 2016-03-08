@@ -163,6 +163,12 @@ int main() {
     rpcTerminate();
 
   /* end of client.c */
+  free(args0);
+  free(args1);
+  free(return2);
+  free(args2);
+  free(args3);
+  free(args4);
   return 0;
 }
 
