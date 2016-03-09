@@ -480,6 +480,7 @@ void Binder::removeServer(int socketFD){
 
 
 int sendTo(int sockFD, unsigned int msg_len, int type, void* data){
+
 	unsigned int total_len = sizeof(msg_len) + sizeof(type) + msg_len;
 	char msg[total_len+1];
 	
@@ -507,17 +508,35 @@ int sendTo(int sockFD, unsigned int msg_len, int type, void* data){
 int Binder::sendResult(int sockFD, int type, location *loc, int* retCode){
 	__INFO("");
 
-	unsigned int msg_len = 0;
+	unsigned int msg_len = 0, total_len = sizeof(msg_len) + sizeof(type);
 	int status = 0;
-
+	char* msg;
 	if(type == LOC_SUCCESS){
 		msg_len = sizeof(location);
-		status = sendTo(sockFD, msg_len, type, (void *)loc);	
+		total_len += msg_len;
+		msg = new char[total_len+1];
+		memset(msg, 0, total_len);	
+
+		memcpy(msg, &msg_len, sizeof(msg_len));
+		memcpy(msg+sizeof(msg_len), &type, sizeof(type));		
+		memcpy(msg+sizeof(msg_len)+sizeof(type), loc, sizeof(location));
 	}
 	else{
 		msg_len = sizeof(retCode);
-		status = sendTo(sockFD, msg_len, type, (void *)retCode);
+		total_len += msg_len;
+		msg = new char[total_len+1];
+		memset(msg, 0, total_len);
+
+		memcpy(msg, &msg_len, sizeof(msg_len));
+		memcpy(msg+sizeof(msg_len), &type, sizeof(type));
+		memcpy(msg+sizeof(msg_len)+sizeof(type), retCode, sizeof(int));
+		
 	}
+
+	msg[total_len] = '\0';
+	status = send(sockFD, msg, total_len, 0);
+
+	delete []msg;
 
 	return status;
 }
