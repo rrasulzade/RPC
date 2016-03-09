@@ -125,7 +125,8 @@ int Binder::handle_message(int sockFD){
    	try{
 		msg = new char[msg_len+1];					  		   	
 	}catch(bad_alloc& e){
-	    status = sendResult(sockFD, msgType, ERR_BINDER_OUT_OF_MEMORY);
+		int code = ERR_BINDER_OUT_OF_MEMORY;
+	    status = sendResult(sockFD, msgType, NULL, &code);
 	    return status;
 	}	
 
@@ -161,7 +162,10 @@ int Binder::handle_message(int sockFD){
    			status = terminateServers();							 
    			break;
    		default:
-   			status = sendResult(sockFD, UNKNOWN, ERR_RPC_UNEXPECTED_MSG_TYPE); 	
+   		{
+   			int code = ERR_RPC_UNEXPECTED_MSG_TYPE;
+   			status = sendResult(sockFD, UNKNOWN, NULL, &code); 	
+   		}
    	}
 
     delete [] msg;
@@ -193,7 +197,7 @@ void Binder::proc_location_request(int sockFD, char * message){
 		cout << "send LOC_FAILURE  ERR_BINDER_OUT_OF_MEMORY" << endl; 
 
     	int code = ERR_BINDER_OUT_OF_MEMORY;
-	    sendResult(sockFD, LOC_FAILURE, code);
+	    sendResult(sockFD, LOC_FAILURE, NULL, &code);
 	    return;
 	}
 
@@ -229,7 +233,8 @@ void Binder::proc_location_request(int sockFD, char * message){
 				 << server_location.locationInfo.s_id.addr.hostname << " "			
 	    	     << ntohs(server_location.locationInfo.s_port) << endl << endl;
 
-           sendLOC_SUCC(sockFD, server_location.locationInfo);     
+           // sendLOC_SUCC(sockFD, server_location.locationInfo);  
+           sendResult(sockFD, LOC_FAILURE, &(server_location.locationInfo), NULL);
            delete [] proc.procInfo.argTypes;     
 
     	}else{
@@ -239,8 +244,8 @@ void Binder::proc_location_request(int sockFD, char * message){
     	cout << "send LOC_FAILURE" << endl; 
     	cout << proc.procInfo.proc_name <<  " Arglen: " <<  proc.procInfo.argLen <<" -> " << endl;
     	
-    	// int code = ERR_RPC_NO_SERVER_AVAIL;
-	    sendResult(sockFD, LOC_FAILURE, ERR_RPC_NO_SERVER_AVAIL);
+    	int code = ERR_RPC_NO_SERVER_AVAIL;
+	    sendResult(sockFD, LOC_FAILURE, NULL, &code);
 	    delete [] proc.procInfo.argTypes;
     }
 
@@ -304,8 +309,8 @@ void Binder::proc_registration(int sockFD, char * message){
 	}catch(bad_alloc& e){
 		cout << "send REG_FAILURE  ERR_BINDER_OUT_OF_MEMORY" << endl; 
 
-    	// int code = ERR_BINDER_OUT_OF_MEMORY;
-	    sendResult(sockFD, REGISTER_FAILURE, ERR_BINDER_OUT_OF_MEMORY);
+    	int code = ERR_BINDER_OUT_OF_MEMORY;
+	    sendResult(sockFD, REGISTER_FAILURE, NULL, &code);
 	    return;
 	}
 
@@ -363,13 +368,13 @@ void Binder::proc_registration(int sockFD, char * message){
 		    server_sockets.push_back(sockFD);
 	    }
 
-	    // int code = ERR_RPC_SUCCESS;
-        sendResult(sockFD, REGISTER_SUCCESS, ERR_RPC_SUCCESS);
+	    int code = ERR_RPC_SUCCESS;
+        sendResult(sockFD, REGISTER_SUCCESS, NULL, &code);
 
 	}catch(failure& e){
 		cout << "send FAILURE  <msg_type + msg_size + ERR_RPC_PROC_RE_REG >" << endl;
-		// int code = ERR_RPC_PROC_RE_REG;
-        sendResult(sockFD, REGISTER_FAILURE, ERR_RPC_PROC_RE_REG);
+		int code = ERR_RPC_PROC_RE_REG;
+        sendResult(sockFD, REGISTER_FAILURE, NULL, &code);
 	}
 }
 
@@ -411,7 +416,8 @@ int Binder::terminateServers(){
 	printList();
 	cout << "TERMINATE sent to " <<  *v_it << endl;
 	for(; v_it != server_sockets.end(); v_it++){
-		int status = sendResult(*v_it, type, 0);
+		int code = ERR_RPC_SUCCESS;
+		int status = sendResult(*v_it, type, NULL, &code);
 		// sleep(2);
 		
 		cout << "TERMINATE sent to " << *v_it << endl;
@@ -425,6 +431,8 @@ int Binder::terminateServers(){
 
 
 // check whether the given socket is in vector of active server sockets
+// if so, return its index
+// otherwise return -1
 int Binder::getServerIndex(int socketFD){
 	for(unsigned int i = 0; i < server_sockets.size(); i++){
 		if(server_sockets[i] == socketFD){
@@ -436,18 +444,10 @@ int Binder::getServerIndex(int socketFD){
 
 
 // check whether the given socket is in vector of active server sockets
-// if so erase that entry from the vector
-void Binder::checkServers(int socketFD){
+// if so erase that entry from the vector, server queue for Round Robin
+// and proc -> server mapping table
+void Binder::removeServer(int socketFD){
 	int i = getServerIndex(socketFD);
-
-	// cout << "INDEX of " <<  socketFD << " -> " << i << endl;
-	// cout << "Socket Vector:" << endl; 
- //  	for(unsigned int i = 0; i < server_sockets.size(); i++){
- //  		cout << "   " << server_sockets[i] << endl;
- //  	}
-
-
-
 	if(i >= 0){
 		// remove server socket from vector of active sockets
 		server_sockets.erase(server_sockets.begin() + i);
@@ -479,50 +479,64 @@ void Binder::checkServers(int socketFD){
 
 
 // send LOC_SUCCESS to client with the server location
-int Binder::sendLOC_SUCC(int sockFD, location loc){
-	__INFO("");
+// int Binder::sendLOC_SUCC(int sockFD, location loc){
+// 	__INFO("");
 
-	int type = LOC_SUCCESS;
-    unsigned int msg_len = sizeof(location);	
-    unsigned int total_len = sizeof(unsigned int) + sizeof(type) + msg_len;
+// 	int type = LOC_SUCCESS;
+//     unsigned int msg_len = sizeof(location);	
 
+// }
+
+int sendTo(int sockFD, unsigned int msg_len, int type, void* data){
+	unsigned int total_len = sizeof(msg_len) + sizeof(type) + msg_len;
 	char msg[total_len+1];
 	
 	memset(msg, 0, total_len);	
 
 	memcpy(msg, &msg_len, sizeof(msg_len));
 	memcpy(msg+sizeof(msg_len), &type, sizeof(type));
-	memcpy(msg+sizeof(msg_len)+sizeof(type), &loc, sizeof(location));
+	memcpy(msg+sizeof(msg_len)+sizeof(type), data, sizeof(location));
 	msg[total_len] = '\0';
 
-	printf("send LOC_SUCCESS - msg_size:%u total_len:%u \n", msg_len, total_len);
+	printf("sendTo- msg_size:%u total_len:%u \n", msg_len, total_len);
 
 	int status = send(sockFD, msg, total_len, 0);
 
     return status;
 }
 
-
 // send LOC_FAILURE, REGISTER_FAILURE, REGISTER_SUCCESS, TERMINATE and UNKNOWN
 // message types with return code
-int Binder::sendResult(int sockFD, int type, int retCode){
+int Binder::sendResult(int sockFD, int type, location *loc, int* retCode){
 	__INFO("");
 
-	unsigned int msg_len = sizeof(retCode);
-	unsigned int total_len = sizeof(unsigned int) + sizeof(type) + msg_len;
+	unsigned int msg_len = 0;
+	int status = 0;
 
-	char msg[total_len+1];
+	if(type == LOC_SUCCESS){
+		msg_len = sizeof(location);
+		status = sendTo(sockFD, msg_len, type, (void *)loc);	
+	}
+	else{
+		msg_len = sizeof(retCode);
+		status = sendTo(sockFD, msg_len, type, (void *)retCode);
+	}
 
-	memset(msg, 0, total_len);	
+	
+	// unsigned int total_len = sizeof(unsigned int) + sizeof(type) + msg_len;
 
-	memcpy(msg, &msg_len, sizeof(msg_len));
-	memcpy(msg+sizeof(msg_len), &type, sizeof(type));
-	memcpy(msg+sizeof(msg_len)+sizeof(type), &retCode, sizeof(retCode));
-	msg[total_len] = '\0';
+	// char msg[total_len+1];
 
-	printf("sendResult - msg_size:%u total_len:%u\n", msg_len, total_len);
+	// memset(msg, 0, total_len);	
 
-	int status = send(sockFD, msg, total_len, 0);
+	// memcpy(msg, &msg_len, sizeof(msg_len));
+	// memcpy(msg+sizeof(msg_len), &type, sizeof(type));
+	// memcpy(msg+sizeof(msg_len)+sizeof(type), &retCode, sizeof(retCode));
+	// msg[total_len] = '\0';
+
+	// printf("sendResult - msg_size:%u total_len:%u\n", msg_len, total_len);
+
+	// int status = send(sockFD, msg, total_len, 0);
 
 	return status;
 }
@@ -653,7 +667,7 @@ void Binder::start(){
                      
                         // if this is server socket, remove from vector of active server socket
                         // and remove from proc -> server mapping table
-                        checkServers(connections[i]);
+                        removeServer(connections[i]);
 
                         // erase this socket from connections list
                         connections.erase(connections.begin() + i);
