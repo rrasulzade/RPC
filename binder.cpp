@@ -428,7 +428,7 @@ int Binder::terminateServers(){
 	for(; v_it != server_sockets.end(); v_it++){
 		int code = ERR_RPC_SUCCESS;
 		// int status = sendResult(*v_it, type, NULL, &code);
-		sendResult(sockFD, REGISTER_FAILURE, code);
+		int status = sendResult(*v_it, type, code);
 		
 		cout << "TERMINATE sent to " << *v_it << endl;
 
