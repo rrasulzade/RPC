@@ -1,5 +1,5 @@
 /*
-	Queue implementation for sockets
+	Atomic Queue implementation for workers to get client sockets
 */
 
 
@@ -9,17 +9,12 @@
 #include "int_queue.h"
 
 
-/*
-pthread_mutex_lock(&Qmutex);
-pthread_cond_wait (&CV, &Qmutex);
-*/
-
 
 // mutex for inserting/removing data from/into queue
-pthread_mutex_t Qmutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t Qmutex 	= PTHREAD_MUTEX_INITIALIZER;
 
 // For syncronization when the queue is empty
-pthread_cond_t CV		= PTHREAD_COND_INITIALIZER;
+static pthread_cond_t CV		= PTHREAD_COND_INITIALIZER;
 
 
 void queue_init (intQueue *Q){
@@ -49,7 +44,7 @@ int queue_push (intQueue *Q, int data){
 	
 	if (Q->size == 0) {
 		if (Q->head != NULL || Q->tail != NULL){
-			DEBUG("WARNING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! (head != NULL || tail != NULL),  BUT size = 0");
+			WARNING("(head != NULL || tail != NULL),  BUT size = 0");
 		}	
 		Q->head = Q->tail = newnode;
 	}
@@ -104,7 +99,6 @@ int queue_pop (intQueue *Q, int *data){
 
 int queue_reset (intQueue *Q){
 	pthread_mutex_lock(&Qmutex);
-	DEBUG("queue_reset() is called!");
 	struct node *cur = Q->head, *node_del;
 	while (cur != NULL){
 		node_del = cur;
@@ -113,7 +107,6 @@ int queue_reset (intQueue *Q){
 	}
 	Q->size = 0;
 	Q->head = Q->tail = NULL;
-	DEBUG("queue_reset() is returning...");
 	pthread_mutex_unlock(&Qmutex);
 	return 0;
 }

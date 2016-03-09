@@ -13,9 +13,10 @@
 
 #define CHAR_ARRAY_LENGTH 100
 
-int main() {
 
-  /* prepare the arguments for f0 */
+
+void f0_call (){
+	/* prepare the arguments for f0 */
   int a0 = 5;
   int b0 = 10;
   int count0 = 3;
@@ -32,7 +33,22 @@ int main() {
   args0[0] = (void *)&return0;
   args0[1] = (void *)&a0;
   args0[2] = (void *)&b0;
+  
+  
+  int s0 = rpcCall("f0", argTypes0, args0);
+  /* test the return f0 */
+  printf("\nEXPECTED return of f0 is: %d\n", a0 + b0);
+  if (s0 >= 0) { 
+    printf("ACTUAL return of f0 is: %d\n", *((int *)(args0[0])));
+  }
+  else {
+    printf("Error: %d\n", s0);
+  }
+  
+  free(args0);
+}
 
+void f1_call (){
   /* prepare the arguments for f1 */
   char a1 = 'a';
   short b1 = 100;
@@ -56,7 +72,22 @@ int main() {
   args1[2] = (void *)&b1;
   args1[3] = (void *)&c1;
   args1[4] = (void *)&d1;
-    
+  
+  
+  int s1 = rpcCall("f1", argTypes1, args1);
+  /* test the return of f1 */
+  printf("\nEXPECTED return of f1 is: %ld\n", a1 + b1 * c1 - d1);
+  if (s1 >= 0) { 
+    printf("ACTUAL return of f1 is: %ld\n", *((long *)(args1[0])));
+  }
+  else {
+    printf("Error: %d\n", s1);
+  }
+  
+  free(args1);
+}
+
+void f2_call (){
   /* prepare the arguments for f2 */
   float a2 = 3.14159;
   double b2 = 1234.1001;
@@ -74,7 +105,24 @@ int main() {
   args2[0] = (void *)return2;
   args2[1] = (void *)&a2;
   args2[2] = (void *)&b2;
+  
+  
+  int s2 = rpcCall("f2", argTypes2, args2);
+  /* test the return of f2 */
+  printf("\nEXPECTED return of f2 is: 31234\n");
+  if (s2 >= 0) {
+    printf("ACTUAL return of f2 is: %s\n", (char *)args2[0]);
+  }
+  else {
+    printf("Error: %d\n", s2);
+  }
+  
+  
+  free(return2);
+  free(args2);
+}
 
+void f3_call (){
   /* prepare the arguments for f3 */
   long a3[11] = {11, 109, 107, 105, 103, 101, 102, 104, 106, 108, 110};
   int count3 = 1;
@@ -86,53 +134,8 @@ int main() {
 
   args3 = (void **)malloc(count3 * sizeof(void *));
   args3[0] = (void *)a3;
-
-  /* prepare the arguemtns for f4 */
-  char *a4 = "non_exist_file_to_be_printed";
-  int count4 = 1;
-  int argTypes4[count4 + 1];
-  void **args4;
-
-  argTypes4[0] = (1 << ARG_INPUT) | (ARG_CHAR << 16) | strlen(a4);
-  argTypes4[1] = 0;
-
-  args4 = (void **)malloc(count4 * sizeof(void *));
-  args4[0] = (void *)a4;
-
-  /* rpcCalls */
-  int s0 = rpcCall("f0", argTypes0, args0);
-  /* test the return f0 */
-  printf("\nEXPECTED return of f0 is: %d\n", a0 + b0);
-  if (s0 >= 0) { 
-    printf("ACTUAL return of f0 is: %d\n", *((int *)(args0[0])));
-  }
-  else {
-    printf("Error: %d\n", s0);
-  }
-
-
-  int s1 = rpcCall("f1", argTypes1, args1);
-  /* test the return of f1 */
-  printf("\nEXPECTED return of f1 is: %ld\n", a1 + b1 * c1 - d1);
-  if (s1 >= 0) { 
-    printf("ACTUAL return of f1 is: %ld\n", *((long *)(args1[0])));
-  }
-  else {
-    printf("Error: %d\n", s1);
-  }
-
-
-  int s2 = rpcCall("f2", argTypes2, args2);
-  /* test the return of f2 */
-  printf("\nEXPECTED return of f2 is: 31234\n");
-  if (s2 >= 0) {
-    printf("ACTUAL return of f2 is: %s\n", (char *)args2[0]);
-  }
-  else {
-    printf("Error: %d\n", s2);
-  }
-
-
+  
+  
   int s3 = rpcCall("f3", argTypes3, args3);
   /* test the return of f3 */
   printf(
@@ -149,29 +152,55 @@ int main() {
   }
   else {
     printf("Error: %d\n", s3);
-  } 
+  }
+  
+   
+  free(args3);
+}
 
+void f4_call (){
+  /* prepare the arguemtns for f4 */
+  char *a4 = "non_exist_file_to_be_printed";
+  int count4 = 1;
+  int argTypes4[count4 + 1];
+  void **args4;
+
+  argTypes4[0] = (1 << ARG_INPUT) | (ARG_CHAR << 16) | strlen(a4);
+  argTypes4[1] = 0;
+
+  args4 = (void **)malloc(count4 * sizeof(void *));
+  args4[0] = (void *)a4;
+  
+  
   int s4 = rpcCall("f4", argTypes4, args4);
   /* test the return of f4 */
   printf("\ncalling f4 to print an non existed file on the server");
   printf("\nEXPECTED return of f4: some integer other than 0");
   printf("\nACTUAL return of f4: %d\n", s4);
-
-  /* rpcTerminate */
-  printf("\ndo you want to terminate? y/n: ");
-  if (getchar() == 'y')
-    rpcTerminate();
-
-  /* end of client.c */
-  free(args0);
-  free(args1);
-  free(return2);
-  free(args2);
-  free(args3);
+  
+  
   free(args4);
-  return 0;
 }
 
 
 
 
+
+
+int main() {
+
+  /* rpcCalls */
+  f0_call ();
+  f1_call ();
+  f2_call ();
+  f3_call ();
+  f4_call ();
+
+
+  /* rpcTerminate */
+  printf("\ndo you want to terminate? y/n: ");
+  if (getchar() == 'y') rpcTerminate();
+
+  
+  return 0;
+}

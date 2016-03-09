@@ -6,7 +6,6 @@
 
 #define _BSD_SOURCE
 
-#define	NUM_THREADS		1
 
 #include <pthread.h>
 #include <arpa/inet.h>
@@ -28,31 +27,34 @@
 
 // these are modified only in register and init stages.
 // Multiple threads accessing these data is ok during execution of rpcExecute()
-struct proc_node *proc_list = NULL;
-location my_loc;
-int listening_sock;
-int binder_sock;
+static struct proc_node *proc_list = NULL;
+static location my_loc;
+static int listening_sock;
+static int binder_sock;
 
 // this is critical region
-intQueue intQ;
+static intQueue intQ;
 
 // worker threads to be able to handle multiple requests at a time
-pthread_t worker_threads[NUM_THREADS];
+static pthread_t worker_threads[NUM_THREADS];
 
 
 
-
-
+/* 	
+	Server side function to create a listening socket to
+	be able to accept connection request from the clients
+*/
 int create_listening_sock(){
 	DEBUG("create_listening_sock is called");
-	// set up the sockets
-	struct sockaddr_in server;
-	memset(&server, 0, sizeof(struct sockaddr_in));
 	
 	// set up a listening socket for clients
+	struct sockaddr_in server;
+	memset(&server, 0, sizeof(struct sockaddr_in));
 	server.sin_family = AF_INET;
 	server.sin_addr.s_addr = INADDR_ANY;
 	server.sin_port = 0;
+	
+	// create the socket
 	listening_sock = socket (AF_INET, SOCK_STREAM, 0);
 	
 	if (listening_sock == -1) {
@@ -66,6 +68,7 @@ int create_listening_sock(){
 		ERROR("ERROR: could not bind the listening socket! Exiting...");
 		return ERR_RPC_SOCKET_FAILED;
 	}
+	
 	// start listening to be able to accept connection requests
 	listen (listening_sock, SOMAXCONN);
 	
@@ -73,8 +76,14 @@ int create_listening_sock(){
 	return ERR_RPC_SUCCESS;
 }
 
+
+/* 	
+	Server side function to create a socket to the binder to be
+	able to register procedures and receive termination signal
+*/
 int create_binder_sock(){
 	DEBUG("create_binder_sock is called");
+	
 	// create a socket to connect to the binder
 	struct sockaddr_in binder;
 	binder_sock = socket (AF_INET, SOCK_STREAM, 0);
@@ -83,17 +92,18 @@ int create_binder_sock(){
 		return ERR_RPC_SOCKET_FAILED;
 	}
 	
+	// get the hostname of the binder from the environment variable
 	char *env = getenv("BINDER_ADDRESS");
 	if (env == NULL) {
 		ERROR("ERROR: NULL POINTER in env[addr] variable! Exiting...");
 		return ERR_RPC_ENV_ADDR_NULL;
 	}
-	
 	struct hostent *he = gethostbyname(env);
-	
 	memcpy (&binder.sin_addr, he->h_addr_list[0], he->h_length);
 	
 	binder.sin_family = AF_INET;
+	
+	// get the port number of the binder from the environment variable
 	env = getenv("BINDER_PORT");
 	if (env == NULL) {
 		ERROR("ERROR: NULL POINTER in env[port] variable! Exiting...");
@@ -101,6 +111,7 @@ int create_binder_sock(){
 	}
 	binder.sin_port = htons (atoi(env));
 	
+	// connect to the binder
 	if (connect (binder_sock, (struct sockaddr *)&binder, sizeof(binder)) < 0) {
 		ERROR("ERROR: Could not connect to the binder! Exiting...");
 		return ERR_RPC_SOCKET_FAILED;
@@ -111,10 +122,16 @@ int create_binder_sock(){
 }
 
 
+/*
+	Server side function to initialize my_loc that contains
+	the hostname and port number of the server
+*/
 int setup_my_loc(){
 	DEBUG("setup_my_loc is called");
 	// choose a hostname type and fill in the hostname field in my_loc
 	my_loc.s_id.addr_type = ADDR_TYPE_HOSTNAME;
+	
+	// store the hostname in hostname field
 	gethostname (my_loc.s_id.addr.hostname, MAX_HOSTNAME_SIZE*sizeof(char));
 	my_loc.s_id.addr.hostname[MAX_HOSTNAME_SIZE] = '\0';
 	DEBUG("SERVER_ADDRESS %s", my_loc.s_id.addr.hostname);
@@ -125,13 +142,17 @@ int setup_my_loc(){
 	memset(&s, 0, sizeof(struct sockaddr_in));
 	getsockname (listening_sock, (struct sockaddr *)&s, (socklen_t*)&addrlen);
 	my_loc.s_port = s.sin_port;
+	
 	DEBUG("SERVER_PORT %d", ntohs(my_loc.s_port));
 	DEBUG("setup_my_loc is returning");
 	return ERR_RPC_SUCCESS;
 }
 
+
+/*
+	
+*/
 unsigned size_of_arg (int arg_type) {
-	DEBUG("size_of_arg is called");
 	unsigned size = 0;
 	switch ((arg_type >> 16) & 0xff) {
 		case ARG_CHAR:
@@ -156,36 +177,42 @@ unsigned size_of_arg (int arg_type) {
 			ERROR("Unknown argument type!");
 			break;
 	}
-	DEBUG("size_of_arg is returning");
+	// if the last byte is 0, then it is scalar otherwise an array of length [last byte]
 	if ((arg_type & 0xff) == 0) return size;
 	return size*(arg_type & 0xff);
 }
 
+
+
 unsigned find_args_size (unsigned arglen, int* argTypes, unsigned *arg_sizes) {
-	DEBUG("find_args_size is called");
+	//DEBUG("find_args_size is called");
 	unsigned total_arg_size = 0;
 	for (unsigned i = 0; i < arglen; i++) {
 		arg_sizes[i] = size_of_arg (argTypes[i]);
 		total_arg_size += arg_sizes[i];
 	}
-	DEBUG("find_args_size is returning");
+	//DEBUG("find_args_size is returning");
 	return total_arg_size;
 }
 
+
+
 int unmarshall_args_no_alloc (unsigned arglen, int *argTypes, char *args_buff, void **args) {
-	DEBUG("unmarshall_args_no_alloc is called    arglen=%d", arglen);
+	//DEBUG("unmarshall_args_no_alloc is called    arglen=%d", arglen);
 	unsigned size_arg = 0;
 	for (unsigned i = 0; i < arglen; i++){
 		size_arg = size_of_arg (argTypes[i]);
 		memcpy(args[i], args_buff, size_arg);
 		args_buff += size_arg;
 	}
-	DEBUG("unmarshall_args_no_alloc is returning");
+	//DEBUG("unmarshall_args_no_alloc is returning");
 	return ERR_RPC_SUCCESS;
 }
 
+
+
 int unmarshall_args (unsigned arglen, int *argTypes, char *args_buff, void **args) {
-	DEBUG("unmarshall_args is called    arglen=%d", arglen);
+	//DEBUG("unmarshall_args is called    arglen=%d", arglen);
 	unsigned size_arg = 0;
 	for (unsigned i = 0; i < arglen; i++){
 		size_arg = size_of_arg (argTypes[i]);
@@ -193,41 +220,47 @@ int unmarshall_args (unsigned arglen, int *argTypes, char *args_buff, void **arg
 		if (args[i] == NULL) {
 			// cleanup before returning error
 			for (unsigned j = 0; j < i; j++) free(args[j]);
-			ERROR("unmarshall_args is returning NULL");
+			ERROR("unmarshall_args is returning RR_RPC_OUT_OF_MEMORY");
 			return ERR_RPC_OUT_OF_MEMORY;
 		}
 		memcpy(args[i], args_buff, size_arg);
 		args_buff += size_arg;
 	}
-	DEBUG("unmarshall_args is returning succesfully");
+	//DEBUG("unmarshall_args is returning succesfully");
 	return ERR_RPC_SUCCESS;
 }
 
+
+
 int marshall_args (unsigned arglen, int *argTypes, char *args_buff, void **args) {
-	DEBUG("marshall_args is called");
+	//DEBUG("marshall_args is called");
 	unsigned size_arg = 0;
 	for (unsigned i = 0; i < arglen; i++){
 		size_arg = size_of_arg (argTypes[i]);
 		memcpy(args_buff, args[i], size_arg);
 		args_buff += size_arg;
 	}
-	DEBUG("marshall_args is returning");
+	//DEBUG("marshall_args is returning");
 	return ERR_RPC_SUCCESS;
 }
 
+
+
 void destroy_args (unsigned arglen, void **args, void **args_origin) {
-	DEBUG("destroy_args is called");
+	//DEBUG("destroy_args is called");
 	for (unsigned i = 0; i < arglen; i++) {
 		// deallocate the memory allocated in skeleton
-		//if (args[i] != args_origin[i]) free(args[i]);
+		if (args[i] != args_origin[i]) free(args[i]);
 		
-		// eallocate the memory allocated for procedure invocation
+		// deallocate the memory allocated for procedure invocation
 		free(args_origin[i]);
 	}
 	free(args);
 	free(args_origin);
-	DEBUG("destroy_args is returning");
+	//DEBUG("destroy_args is returning");
 }
+
+
 
 int send_error_msg (char *reply_buff, int error, int sock) {
 	DEBUG("send_error_msg is called");
@@ -245,6 +278,23 @@ int send_error_msg (char *reply_buff, int error, int sock) {
 	DEBUG("send_error_msg is returning");
 	return ERR_RPC_SUCCESS;
 }
+
+
+
+char *proc_sig_unmarshal (proc_sig *sig, char *msg_offset){
+	memset (sig, 0, sizeof(proc_sig));
+	strncpy(sig->proc_name, msg_offset, MAX_PROC_NAME_SIZE);
+	sig->proc_name[MAX_PROC_NAME_SIZE] = '\0';
+	
+	msg_offset += (MAX_PROC_NAME_SIZE+1)*sizeof(char);
+	sig->argLen = *((unsigned *)msg_offset);
+	
+	msg_offset += sizeof(unsigned);
+	sig->argTypes = (int*)msg_offset;
+	return msg_offset;
+}
+
+
 
 int handle_request (int sock){
 	DEBUG("handle_request is called");
@@ -276,41 +326,31 @@ int handle_request (int sock){
 	}
 	
 	if (msg_type != EXECUTE){
-		ERROR("Unknown request type from the client");
 		send_error_msg (msg_req, ERR_RPC_UNEXPECTED_MSG_TYPE, sock);
 		free(msg_req);
+		ERROR("Unknown request type from the client");
 		return ERR_RPC_UNEXPECTED_MSG_TYPE;
 	}
 	
 	// unmarshal the message to find skel corresponding to name and argTypes
 	proc_sig sig;
-	memset (&sig, 0, sizeof(proc_sig));
-	strncpy(sig.proc_name, msg_offset, MAX_PROC_NAME_SIZE);
-	sig.proc_name[MAX_PROC_NAME_SIZE] = '\0';
-	
-	msg_offset += (MAX_PROC_NAME_SIZE+1)*sizeof(char);
-	sig.argLen = *((unsigned *)msg_offset);
-	
-	msg_offset += sizeof(unsigned);
-	sig.argTypes = (int*)msg_offset;
+	msg_offset = proc_sig_unmarshal (&sig, msg_offset);
 	
 	skel f = find_skel (&proc_list, &sig);
 	if (f == NULL) {
 		send_error_msg (msg_req, ERR_RPC_UNREGISTERED_PROC, sock);
 		free(msg_req);
+		ERROR("Returning ERR_RPC_UNREGISTERED_PROC");
 		return ERR_RPC_UNREGISTERED_PROC;
 	}
 	void **args = (void**)malloc(sig.argLen*(sizeof(void*)));
-	if (args == NULL) {
-		send_error_msg (msg_req, ERR_RPC_OUT_OF_MEMORY, sock);
-		free(msg_req);
-		return ERR_RPC_OUT_OF_MEMORY;
-	}
 	void **args_origin = (void**)malloc(sig.argLen*(sizeof(void*)));
-	if (args_origin == NULL) {
+	if (args == NULL || args_origin == NULL) {
 		send_error_msg (msg_req, ERR_RPC_OUT_OF_MEMORY, sock);
 		free(msg_req);
-		free(args);
+		if (args) free(args);
+		if (args_origin) free(args_origin);
+		ERROR("Returning ERR_RPC_OUT_OF_MEMORY");
 		return ERR_RPC_OUT_OF_MEMORY;
 	}
 	
@@ -321,6 +361,7 @@ int handle_request (int sock){
 		free(msg_req);
 		free(args);
 		free(args_origin);
+		ERROR("Returning ERR_RPC_OUT_OF_MEMORY");
 		return ERR_RPC_OUT_OF_MEMORY;
 	}
 	// copy original args before envoking the procedure to avoid memory leaks
@@ -331,11 +372,11 @@ int handle_request (int sock){
 	DEBUG ("Result of function call:%d    args[0]=%d", ret_code, *(int*)args[0]);
 	
 	if (ret_code) {	// function returned error
-		ERROR("handle_request() : skeleton returned error! ret=%d", ret_code);
+		ERROR("skeleton returned error! ret=%d", ret_code);
 		send_error_msg (msg_req, ERR_RPC_PROC_EXEC_FAILED, sock);
 		free(msg_req);
 		destroy_args (sig.argLen, args, args_origin);
-		ERROR("handle_request is returning...ERR_RPC_PROC_EXEC_FAILED");
+		ERROR("returning ERR_RPC_PROC_EXEC_FAILED");
 		return ERR_RPC_PROC_EXEC_FAILED;
 	}
 	response_len = sizeof(unsigned)+sizeof(int)+msg_len;
@@ -349,7 +390,7 @@ int handle_request (int sock){
 	//send the success message
 	ret_code = send (sock, msg_req, response_len, 0);
 	if (ret_code < 0){
-		ERROR("ERROR: SENDING reply (EXECUTE_FAILURE) to the client failed!");
+		ERROR("SENDING reply (EXECUTE_FAILURE) to the client failed!");
 		ret_code = ERR_RPC_SOCKET_FAILED;
 	}
 	else ret_code = ERR_RPC_SUCCESS;
@@ -360,6 +401,8 @@ int handle_request (int sock){
 	DEBUG("handle_request is returning...");
 	return ret_code;
 }
+
+
 
 void *worker_code (void *ptr){
 	DEBUG("worker_code is called...");
@@ -380,6 +423,8 @@ void *worker_code (void *ptr){
 	DEBUG("worker_code is returning...");
 	return ERR_RPC_SUCCESS;
 }
+
+
 
 int rpcInit() {
 	DEBUG("rpcInit() is called...");
@@ -414,12 +459,14 @@ int rpcInit() {
 	return ERR_RPC_SUCCESS;
 }
 
+
+
 int send_termination_request (){
 	DEBUG("send_termination_request() is called...");
 	unsigned total_len = sizeof(unsigned)+2*sizeof(int);
 	char *msg = malloc(total_len);
 	if (msg == NULL) {
-		ERROR("ERR_RPC_OUT_OF_MEMORY");
+		ERROR("returning ERR_RPC_OUT_OF_MEMORY");
 		return ERR_RPC_OUT_OF_MEMORY;
 	}
 	memset(msg, 0, total_len);
@@ -431,18 +478,20 @@ int send_termination_request (){
 	
 	if (ret < 0){
 		ERROR("ERROR: SENDING termination request to the binder failed!");
-		return ERR_RPC_BINDER_NOT_FOUND;
+		return ERR_RPC_BINDER_SOCK_FAILED;
 	}
 	DEBUG("send_termination_request() is returning...");
 	return ERR_RPC_SUCCESS;
 }
+
+
 
 int rpcTerminate(){
 	DEBUG("rpcTerminate() is called...");
 	int ret;
 	ret = create_binder_sock();
 	if (ret != ERR_RPC_SUCCESS) {
-		ERROR("rpcTerminate() is returning. binder sock is not created...");
+		ERROR("returning... create_binder_sock() failed!");
 		return ret;
 	}
 	ret = send_termination_request();
@@ -450,6 +499,8 @@ int rpcTerminate(){
 	DEBUG("rpcTerminate() is returning...");
 	return ret;
 }
+
+
 
 int accept_new_connection () {
 	DEBUG("accept_new_connection () is called...");
@@ -461,10 +512,12 @@ int accept_new_connection () {
 		ERROR("accept_new_connection () is returning...accept failed");
 		return ERR_RPC_SOCKET_FAILED;
 	}
-	DEBUG("accept_new_connection () is returning...");
+	DEBUG("accept_new_connection () is returning...new_sock=%d", new_sock);
 	// Accept is successful. Push the socket into the queue so that the worker threads can serve
 	return queue_push (&intQ, new_sock);
 }
+
+
 
 int check_termination_protocol(int *termination){
 	DEBUG("check_termination_protocol () is called...");
@@ -473,25 +526,33 @@ int check_termination_protocol(int *termination){
 	int bytesRcvd, msg_type, reason_code; unsigned msg_len;
 	bytesRcvd = recv(binder_sock, &msg_len, 4, 0);
 	DEBUG("bytesRcvd=%d", bytesRcvd);
+	if (bytesRcvd == 0){
+		*termination = 1;
+		DEBUG("returning ERR_RPC_BINDER_SOCK_CLOSED");
+		return ERR_RPC_BINDER_SOCK_CLOSED;
+	}
 	if (bytesRcvd < 0) {
 		ERROR("ERROR: bytes rcvd is negative!");
+		return ERR_RPC_SOCKET_FAILED;
 	}
 	
 	bytesRcvd = recv(binder_sock, &msg_type, 4, 0);
 	DEBUG("bytesRcvd=%d", bytesRcvd);
 	if (bytesRcvd < 0) {
 		ERROR("ERROR: bytes rcvd is negative!");
+		return ERR_RPC_SOCKET_FAILED;
 	}
 	
 	bytesRcvd = recv(binder_sock, &reason_code, 4, 0);
 	DEBUG("bytesRcvd=%d", bytesRcvd);
 	if (bytesRcvd < 0) {
 		ERROR("ERROR: bytes rcvd is negative!");
+		return ERR_RPC_SOCKET_FAILED;
 	}
 	
 	if (msg_type != TERMINATE){
-		DEBUG("check_termination_protocol () is returning...ERR_RPC_UNEXPECTED_MSG_TYPE msg_len=%d msg_type=%d reason_code=%d", msg_len, msg_type, reason_code);
-		for (volatile int i = 0; 1==1; i++);		// crash();
+		DEBUG("returning ERR_RPC_UNEXPECTED_MSG_TYPE | msg_len=%d msg_type=%d reason_code=%d", msg_len, msg_type, reason_code);
+		// for (volatile int i = 0; 1==1; i++);		// crash();
 		return ERR_RPC_UNEXPECTED_MSG_TYPE;
 	}
 	else{
@@ -501,15 +562,19 @@ int check_termination_protocol(int *termination){
 	}
 }
 
+
+
 // Build the FD_SET for the select system call. Returns highest sock
 int select_list_setup (fd_set *fds) {
 	DEBUG("select_list_setup is called");
 	FD_ZERO(fds);
 	FD_SET(listening_sock, fds);
 	FD_SET(binder_sock, fds);
-	DEBUG("select_list_setup is returning: %d", ((listening_sock > binder_sock) ? listening_sock : binder_sock));
+	DEBUG("select_list_setup is returning. highest_sock: %d", ((listening_sock > binder_sock) ? listening_sock : binder_sock));
 	return ((listening_sock > binder_sock) ? listening_sock : binder_sock);
 }
+
+
 
 // process sockets that are active
 void process_sockets (fd_set *fds, int *termination) {
@@ -522,6 +587,8 @@ void process_sockets (fd_set *fds, int *termination) {
 	}
 	DEBUG("process_sockets () is returning...");
 }
+
+
 
 int terminate_worker_threads (){
 	DEBUG("terminate_worker_threads () is called...");
@@ -537,6 +604,8 @@ int terminate_worker_threads (){
 	DEBUG("terminate_worker_threads () is returning...");
 	return ERR_RPC_SUCCESS;
 }
+
+
 
 int rpcExecute(){
 	DEBUG("rpcExecute() is called...");
@@ -556,7 +625,7 @@ int rpcExecute(){
 		DEBUG("select() returned! num_active_socks=%d", num_active_socks);
 		if (num_active_socks < 0) {
 			ERROR("ERROR: Select returned error! No active sockets! Exiting...");
-			return ERR_RPC_SOCKET_INACTIVE;
+			return ERR_RPC_SOCKS_INACTIVE;
 		}
 		else if (num_active_socks != 0) {
 			process_sockets (&fds, &termination);
@@ -577,28 +646,84 @@ int rpcExecute(){
 	return 0;
 }
 
+
+
 void modify_argTypes (unsigned arglen, int* argTypes){
-	DEBUG("modify_argTypes is called");
 	for (unsigned i = 0; i < arglen; i++){
 		if (argTypes[i] & 0xff) {
 			argTypes[i] &= 0xffffff01;		// set the length of the array to 1 for simplicity
 		}
 	}
-	DEBUG("modify_argTypes is returning");
 }
 
-int rpcRegister(char* name, int* argTypes, skeleton f) {
-	DEBUG("rpcRegister is called!  name:%s    argTypes:%p    skeleton:%p", name, (void*)argTypes, (void*)f);
-	// find arglen
+
+
+static inline unsigned arglen (int *argTypes){
 	unsigned arglen;
 	for (arglen = 0; argTypes[arglen] != 0; arglen++);
+	return arglen;
+}
+
+
+
+int binder_reg_send_rcv(char *msg, unsigned total_len){
+	// send msg to the binder and receive the result
+	if (send (binder_sock, msg, total_len, 0) < 0) {
+		ERROR("ERROR: Sending register msg to the binder failed!");
+		return ERR_RPC_BINDER_SOCK_FAILED;
+	}
 	
-	// prepare the register request to the binder
-	unsigned msg_len = sizeof(location) + (MAX_PROC_NAME_SIZE+1)*sizeof(char) + (1+arglen+1)*sizeof(int);
-	char *msg = malloc(sizeof(unsigned) + sizeof(int) + msg_len);
-	if (msg == NULL) return ERR_RPC_OUT_OF_MEMORY;
+	// receive the result from the binder
+	int bytesRcvd, rcv_len, msg_type, reason_code;
 	
-	memset (msg, 0, sizeof(unsigned) + sizeof(int) + msg_len);
+	// receive the length of the message
+	bytesRcvd = recv(binder_sock, &rcv_len, 4, 0);
+	if (bytesRcvd < 0) {
+		ERROR("bytesRcvd=%d", bytesRcvd);
+		return ERR_RPC_BINDER_SOCK_FAILED;
+	}
+	
+	// receive the type of the message
+	bytesRcvd = recv(binder_sock, &msg_type, 4, 0);
+	if (bytesRcvd < 0) {
+		ERROR("bytesRcvd=%d", bytesRcvd);
+		return ERR_RPC_BINDER_SOCK_FAILED;
+	}
+	
+	// receive the reason code for failure, warning or success
+	bytesRcvd = recv(binder_sock, &reason_code, 4, 0);
+	if (bytesRcvd < 0) {
+		ERROR("bytesRcvd=%d", bytesRcvd);
+		return ERR_RPC_BINDER_SOCK_FAILED;
+	}
+	
+	if (msg_type == REGISTER_FAILURE){
+		ERROR("rpcRegister() is returning... REGISTER_FAILURE");
+		return reason_code;
+	}
+	
+	else if (msg_type != REGISTER_SUCCESS){
+		ERROR("rpcRegister() is returning... ERR_RPC_UNEXPECTED_MSG_TYPE");
+		return ERR_RPC_UNEXPECTED_MSG_TYPE;
+	}
+	return ERR_RPC_SUCCESS;
+}
+
+static inline void marshall_binder_reg_msg (char* name, int argLen, int* argTypes){
+	
+}
+
+char *create_binder_reg_msg (char* name, int argLen, int* argTypes){
+	unsigned msg_len = sizeof(location) + (MAX_PROC_NAME_SIZE+1)*sizeof(char) + (1+argLen+1)*sizeof(int);
+	unsigned total_len = sizeof(unsigned) + sizeof(int) + msg_len;
+	char *msg = malloc(total_len);
+	if (msg == NULL){
+		ERROR("create_binder_reg_msg() is returning NULL...");
+		return NULL;
+	}
+	memset (msg, 0, total_len);
+	
+	// marshall the registration details into the message
 	char *msg_offset = msg;
 	*((unsigned *) msg_offset) = msg_len;
 	
@@ -612,72 +737,90 @@ int rpcRegister(char* name, int* argTypes, skeleton f) {
 	strncpy(msg_offset, name, MAX_PROC_NAME_SIZE);
 	
 	msg_offset += (MAX_PROC_NAME_SIZE+1)*sizeof(char);
-	*((unsigned *) msg_offset) = arglen;
+	*((unsigned *) msg_offset) = argLen;
 	
 	msg_offset += sizeof(unsigned);
-	memcpy(msg_offset, argTypes, (arglen+1)*sizeof(int));
+	memcpy(msg_offset, argTypes, (argLen+1)*sizeof(int));
 	
-	// modify argTypes such that the array size is always stored as 1
-	int *modified_argTypes = (int*)msg_offset;
-	//modify_argTypes (arglen, modified_argTypes);
+	// return dynamically allocated message
+	return msg;
+}
+
+
+
+int binder_registration(char* name, int argLen, int* argTypes){
+	DEBUG("binder_registration is called");
+	// prepare the register request to the binder
+	unsigned msg_len = sizeof(location) + (MAX_PROC_NAME_SIZE+1)*sizeof(char) + (1+argLen+1)*sizeof(int);
+	unsigned total_len = sizeof(unsigned) + sizeof(int) + msg_len;
+	
+	// create a message by marshalling function details
+	char *msg = create_binder_reg_msg (name, argLen, argTypes);
+	if (msg == NULL){
+		ERROR("binder_registration() is returning OUT_OF_MEMORY...");
+		return ERR_RPC_OUT_OF_MEMORY;
+	}
 	
 	// send msg to the binder and receive the result
-	if (send (binder_sock, msg, sizeof(unsigned)+sizeof(int)+msg_len, 0) < 0) {
-		ERROR("ERROR: Sending register msg to the binder failed!");
-		free(msg);
-		return ERR_RPC_BINDER_NOT_FOUND;
+	int ret = binder_reg_send_rcv(msg, total_len);
+	free(msg);
+	if (ret) {
+		ERROR("binder_registration returns ret=%d", ret);
+		return ret;
 	}
 	
-	// receive the result from the binder
-	int bytesRcvd, rcv_len, msg_type, reason_code;
-	bytesRcvd = recv(binder_sock, &rcv_len, 4, 0);
-	bytesRcvd = recv(binder_sock, &msg_type, 4, 0);
-	bytesRcvd = recv(binder_sock, &reason_code, 4, 0);
-	if (bytesRcvd < 0) {
-		ERROR("ERROR: bytes rcvd is negative!");
-	}
-	if (msg_type == REGISTER_FAILURE){
-		free(msg);
-		ERROR("rpcRegister() is returning...REG_FAIL");
-		return reason_code;
-	}
-	if (msg_type != REGISTER_SUCCESS){
-		free(msg);
-		ERROR("rpcRegister() is returning...UNEXPECTED TYPE");
-		return ERR_RPC_UNEXPECTED_MSG_TYPE;
-	}
-	
-	// prepare everything needed for registration
+	DEBUG("binder_registration is returning successfully...");
+	return ERR_RPC_SUCCESS;
+}
+
+
+
+int local_registration(char *name, int argLen, int *argTypes, skeleton f){
+	// prepare everything needed for local registration
 	proc_sig sig;
 	memset (&sig, 0, sizeof(proc_sig));
 	strncpy(sig.proc_name, name, MAX_PROC_NAME_SIZE);
 	sig.proc_name[MAX_PROC_NAME_SIZE] = '\0';
-	sig.argLen = arglen;
-	sig.argTypes = modified_argTypes;
+	sig.argLen = argLen;
+	sig.argTypes = argTypes;
 	
 	//register procedure in the local database
-	DEBUG("Updating the proc_list");
 	int ret = update (&proc_list, &sig, f);
-	DEBUG("Update returned: %d", ret);
-	free(msg);
-	DEBUG("rpcRegister() is returning...");
+	if(ret < 0) { 		// failure
+		ERROR("Update() returned with failure: %d", ret);
+	}
+	if(ret > 0) {		// warning
+		WARNING("Update() returned with update: %d", ret);
+	}
 	return ret;
 }
 
-void simulated_send_error_msg (char *msg_response, char *reply_buff, int error) {
-	*((unsigned *)reply_buff) = sizeof(int);
-	*((int *)(reply_buff+sizeof(unsigned))) = EXECUTE_FAILURE;
-	*((int *)(reply_buff+sizeof(unsigned)+sizeof(int))) = error;
-	//send the message
-	memcpy (msg_response, reply_buff, sizeof(unsigned)+sizeof(int)+sizeof(int));
+
+
+int rpcRegister(char *name, int *argTypes, skeleton f) {
+	DEBUG("rpcRegister is called!  name:%s    argTypes:%p    skeleton:%p", name, (void*)argTypes, (void*)f);
+	// find arglen
+	unsigned argLen = arglen (argTypes);
+	int ret = binder_registration(name, argLen, argTypes);
+	if (ret == ERR_RPC_SUCCESS || ret == ERR_RPC_PROC_RE_REG){
+		int ret2 = local_registration(name, argLen, argTypes, f);
+		if (ret2 != ERR_RPC_SUCCESS && ret2 != ERR_RPC_PROC_RE_REG) {
+		DEBUG("rpcRegister is returning ret2=%d!", ret2); 
+			return ret2;
+		}
+	}
+	DEBUG("rpcRegister is returning ret=%d!", ret); 
+	return ret;
 }
+
+
 
 int locate_server(char *msg, unsigned total_len, location *server_loc){
 	DEBUG("locate_server() is called...");
 	
 	if (send (binder_sock, msg, total_len, 0) < 0) {
 		ERROR("ERROR: Sending register msg to the binder failed!");
-		return ERR_RPC_BINDER_NOT_FOUND;
+		return ERR_RPC_BINDER_SOCK_FAILED;
 	}
 	
 	unsigned msg_len = 0;
@@ -685,48 +828,49 @@ int locate_server(char *msg, unsigned total_len, location *server_loc){
 	
 	bytesRcvd = recv(binder_sock, &msg_len, 4, 0);
 	if (bytesRcvd < 0) {
-		ERROR("ERROR: bytes rcvd is negative!");
+		ERROR("returning ERR_RPC_SOCKET_FAILED. bytesRcvd=%d", bytesRcvd);
 		return ERR_RPC_SOCKET_FAILED;
 	}
 	
 	bytesRcvd = recv(binder_sock, &msg_type, 4, 0);
 	if (bytesRcvd < 0) {
-		ERROR("ERROR: bytes rcvd is negative!");
+		ERROR("returning ERR_RPC_SOCKET_FAILED. bytesRcvd=%d", bytesRcvd);
 		return ERR_RPC_SOCKET_FAILED;
 	}
 	
 	char *rcv_buff = malloc(msg_len*sizeof(char));
-	memset(rcv_buff, 0, msg_len*sizeof(char));
-	
 	if (rcv_buff == NULL){
-		ERROR("ERROR: OUT_OF_MEMORY");
+		ERROR("returning OUT_OF_MEMORY");
 		return ERR_RPC_OUT_OF_MEMORY;
 	}
+	memset(rcv_buff, 0, msg_len*sizeof(char));
+	
 	bytesRcvd = recv(binder_sock, rcv_buff, msg_len, 0);
 	if (bytesRcvd < 0) {
-		ERROR("ERROR: bytes rcvd is negative!");
+		ERROR("returning ERR_RPC_SOCKET_FAILED. bytesRcvd=%d", bytesRcvd);
 		free(rcv_buff);
 		return ERR_RPC_SOCKET_FAILED;
 	}
-	DEBUG("rcv_buff=%p\tbytesRcvd=%d", rcv_buff, bytesRcvd);
 	
 	if (msg_type == LOC_FAILURE) {
-		ERROR("locate_server() : LOC_FAILURE");
+		ERROR("Received: LOC_FAILURE");
 		ret_code = *((int *)(rcv_buff));
 	}
 	else if (msg_type != LOC_SUCCESS) {
-		ERROR("locate_server() : UNEXPECTED_MSG_TYPE");
+		ERROR("Received: UNEXPECTED_MSG_TYPE");
 		ret_code = ERR_RPC_UNEXPECTED_MSG_TYPE;
 	}
 	else {
-		DEBUG("locate_server() : SUCCESSFUL execution");
 		memcpy(server_loc, rcv_buff, sizeof(location));
+		DEBUG("Received: LOC_SUCCESS. host:%s\tport=%d", server_loc->s_id.addr.hostname, ntohs(server_loc->s_port));
 	}
-	DEBUG("free...");
+	
 	free(rcv_buff);
-	DEBUG("locate_server() is returning...");
+	DEBUG("locate_server() is returning... ret_code=%d", ret_code);
 	return ret_code;
 }
+
+
 
 int create_server_connection (int *server_sock, location *server_loc){
 	DEBUG("create_server_connection() is called...");
@@ -748,53 +892,60 @@ int create_server_connection (int *server_sock, location *server_loc){
 		return ERR_RPC_SOCKET_FAILED;
 	}
 	
-	DEBUG("create_server_connection() is returning...");
+	DEBUG("create_server_connection() is returning... server_sock=%d", *server_sock);
 	return ERR_RPC_SUCCESS;
 }
 
-int send_request (int *server_sock, char *msg, unsigned total_msg_len){
-	DEBUG("send_request() is called...");
+
+
+int send_to_server (int *server_sock, char *msg, unsigned total_msg_len){
+	DEBUG("send_to_server() is called...");
 	int ret = send (*server_sock, msg, total_msg_len, 0);
 	if (ret < 0){
-		ERROR("send_request() is returning. Socket failed...");
+		ERROR("send_to_server() is returning ERR_RPC_SOCKET_FAILED");
 		return ERR_RPC_SOCKET_FAILED;
 	}
-	DEBUG("send_request() is returning...");
+	DEBUG("send_to_server() is returning... send => ret=%d", ret);
 	return ERR_RPC_SUCCESS;
 }
 
-int rcv_response (int *server_sock, char *msg_response, unsigned total_msg_len){
-	DEBUG("rcv_response() is called...");
+
+
+int rcv_from_server (int *server_sock, char *msg_response, unsigned total_msg_len){
+	DEBUG("rcv_from_server() is called...");
 	int bytesRcvd = recv(*server_sock, msg_response, total_msg_len, 0);
 	if (bytesRcvd < 0){
-		ERROR("rcv_response() is returning. Socket failed...");
+		ERROR("rcv_from_server() is returning ERR_RPC_SOCKET_FAILED");
 		return ERR_RPC_SOCKET_FAILED;
 	}
-	DEBUG("rcv_response() is returning...");
+	DEBUG("rcv_from_server() is returning... bytesRcvd=%d", bytesRcvd);
 	return ERR_RPC_SUCCESS;
 }
 
+
+
 int handle_server_response (void** args, char *msg_response){
-	DEBUG("handle_server_response is called");
+	DEBUG("handle_server_response is called!");
 	// unsigned msg_len = *((unsigned *)msg_response);
 	int msg_type = *((int *)(msg_response+sizeof(unsigned)));
 	if (msg_type == EXECUTE_FAILURE) {
-		ERROR("handle_server_response returns failure");
+		ERROR("handle_server_response returns EXECUTE_FAILURE. reason_code=%d", *((int *)(msg_response+sizeof(unsigned)+sizeof(int))));
 		return *((int *)(msg_response+sizeof(unsigned)+sizeof(int)));
 	}
 	else if (msg_type != EXECUTE_SUCCESS){
-		ERROR("handle_server_response returns unexpected response type");
+		ERROR("handle_server_response returns ERR_RPC_UNEXPECTED_MSG_TYPE");
 		return ERR_RPC_UNEXPECTED_MSG_TYPE;		// unexpected response type
 	}
 	char *msg_offset = msg_response+sizeof(unsigned)+sizeof(int)+(MAX_PROC_NAME_SIZE+1)*sizeof(char);
 	unsigned arglen = *((unsigned *)(msg_offset));
-	DEBUG("unmarshall_args_no_alloc args_buff=%p", (msg_offset+sizeof(unsigned)+(arglen+1)*sizeof(int)));
 	unmarshall_args_no_alloc   (arglen, (int *)(msg_offset+sizeof(unsigned)),
 								msg_offset+sizeof(unsigned)+(arglen+1)*sizeof(int), args);
 	
-	DEBUG("handle_server_response is returning");
+	DEBUG("handle_server_response is returning...");
 	return ERR_RPC_SUCCESS;
 }
+
+
 
 int rpcCall(char* name, int* argTypes, void** args) {
 	DEBUG("rpcCall() is called...");
@@ -896,21 +1047,21 @@ int rpcCall(char* name, int* argTypes, void** args) {
 		return ret;
 	}
 	
-	ret = send_request (&server_sock, msg, total_msg_len);
+	ret = send_to_server (&server_sock, msg, total_msg_len);
 	if (ret != ERR_RPC_SUCCESS) {
 		free(arg_sizes);
 		free(msg);
 		free(msg_response);
-		ERROR("rpcCall() is returning. send_request() failed...");
+		ERROR("rpcCall() is returning. send_to_server() failed...");
 		return ret;
 	}
 	
-	ret = rcv_response (&server_sock, msg_response, total_msg_len);
+	ret = rcv_from_server (&server_sock, msg_response, total_msg_len);
 	if (ret != ERR_RPC_SUCCESS) {
 		free(arg_sizes);
 		free(msg);
 		free(msg_response);
-		ERROR("rpcCall() is returning. rcv_response() failed...");
+		ERROR("rpcCall() is returning. rcv_from_server() failed...");
 		return ret;
 	}
 	
