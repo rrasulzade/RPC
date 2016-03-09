@@ -46,7 +46,7 @@ class Binder{
   	void start();
   	void setup_socket();
   	int handle_message(int sockFD);
-    int sendLOC_SUCC(int sockFD, location loc);
+    // int sendLOC_SUCC(int sockFD, location loc);
     // int sendResult(int sockFD, int type, int retCode);
 
     int sendResult(int sockFD, int type, void* data);

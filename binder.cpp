@@ -97,6 +97,28 @@ Binder::~Binder(void){
 }
 
 
+int recvMsg(int sockFD, char buff[], unsigned int msg_len){
+	if (msg_len <= 0) {
+		return 0;
+	}
+
+	unsigned int bytesRemain = msg_len;
+	int received = 0;
+	char *msg = buff;
+
+	while (bytesRemain > 0) {
+		received = recv(sockFD, msg, bytesRemain, 0);
+		if (received <= 0) {
+			cerr << "ERROR: on receiving message" << endl;
+			return received;
+		}
+		msg += received;
+		bytesRemain -= received;	 
+	}
+	
+	return msg_len;
+}
+
 
 // handle requests from Server and Client
 // send appropriate result back to sender
@@ -109,14 +131,20 @@ int Binder::handle_message(int sockFD){
     char *msg;
      
     // receive message len
-    while(totalBytesRcvd < sizeof(msg_len)){
-	    status = recv(sockFD, &msg_len, sizeof(msg_len), 0);
-	    if(status <= 0){
-	    	cerr << "ERROR: on receiving message length" << endl;
-	    	return status;
-	   	}
-	   	totalBytesRcvd += status;
-	}
+    char len[sizeof(int)];
+    status = recvMsg(sockFD, len, sizeof(int));
+    if(status <= 0) return status;
+	memcpy(&msg_len, len, sizeof(int));
+
+
+ //    while(totalBytesRcvd < sizeof(msg_len)){
+	//     status = recv(sockFD, &msg_len, sizeof(msg_len), 0);
+	//     if(status <= 0){
+	//     	cerr << "ERROR: on receiving message length" << endl;
+	//     	return status;
+	//    	}
+	//    	totalBytesRcvd += status;
+	// }
 
 
    	// receive message type
@@ -347,9 +375,6 @@ void Binder::proc_registration(int sockFD, char * message){
     // otherwise, add this server to procedure location set
     try{ 
 	    if(map_it != sig_to_location.end()){
-	    	
-	    	// debug("Already registered");	    
-
 	    	list<ProcLocation>::iterator set_it = map_it->second.begin();
 	    	for(; set_it != map_it->second.end(); set_it++){
 	    		if (loc == *set_it){
@@ -497,34 +522,9 @@ void Binder::removeServer(int socketFD){
 }
 
 
-
-// int sendTo(int sockFD, unsigned int msg_len, int type, void* data){
-
-// 	unsigned int total_len = sizeof(msg_len) + sizeof(type) + msg_len;
-// 	char msg[total_len+1];
-	
-// 	memset(msg, 0, total_len);	
-
-// 	memcpy(msg, &msg_len, sizeof(msg_len));
-// 	memcpy(msg+sizeof(msg_len), &type, sizeof(type));
-// 	if(type == LOC_SUCCESS){
-// 		memcpy(msg+sizeof(msg_len)+sizeof(type), data, sizeof(location));
-// 	}else{
-// 		memcpy(msg+sizeof(msg_len)+sizeof(type), data, sizeof(int));
-// 	}
-
-// 	msg[total_len] = '\0';
-
-// 	printf("sendTo- msg_size:%u total_len:%u \n", msg_len, total_len);
-
-// 	int status = send(sockFD, msg, total_len, 0);
-
-//     return status;
-// }
-
 // send LOC_FAILURE, REGISTER_FAILURE, REGISTER_SUCCESS, TERMINATE and UNKNOWN
 // message types with return code
-int Binder::sendResult(int sockFD, int type, void* data){ //location *loc, int* retCode){
+int Binder::sendResult(int sockFD, int type, void* data){ 
 	__INFO("");
 
 	unsigned int msg_len = 0, total_len = sizeof(msg_len) + sizeof(type);
@@ -539,8 +539,7 @@ int Binder::sendResult(int sockFD, int type, void* data){ //location *loc, int* 
 		memcpy(msg, &msg_len, sizeof(msg_len));
 		memcpy(msg+sizeof(msg_len), &type, sizeof(type));		
 		memcpy(msg+sizeof(msg_len)+sizeof(type), data, sizeof(location));
-	}
-	else{
+	}else{
 		msg_len = sizeof(int);
 		total_len += msg_len;
 		msg = new char[total_len+1];
@@ -548,42 +547,40 @@ int Binder::sendResult(int sockFD, int type, void* data){ //location *loc, int* 
 
 		memcpy(msg, &msg_len, sizeof(msg_len));
 		memcpy(msg+sizeof(msg_len), &type, sizeof(type));
-		memcpy(msg+sizeof(msg_len)+sizeof(type), data, sizeof(int));
-		
+		memcpy(msg+sizeof(msg_len)+sizeof(type), data, sizeof(int));	
 	}
 
 	msg[total_len] = '\0';
 	status = send(sockFD, msg, total_len, 0);
 
 	delete []msg;
-
 	return status;
 }
 
 
 // send LOC_SUCCESS to client with the server location
-int Binder::sendLOC_SUCC(int sockFD, location loc){
-	__INFO("");
+// int Binder::sendLOC_SUCC(int sockFD, location loc){
+// 	__INFO("");
 
-	int type = LOC_SUCCESS;
-    unsigned int msg_len = sizeof(location);	
-    unsigned int total_len = sizeof(unsigned int) + sizeof(type) + msg_len;
+// 	int type = LOC_SUCCESS;
+//     unsigned int msg_len = sizeof(location);	
+//     unsigned int total_len = sizeof(unsigned int) + sizeof(type) + msg_len;
 
-	char msg[total_len+1];
+// 	char msg[total_len+1];
 	
-	memset(msg, 0, total_len);	
+// 	memset(msg, 0, total_len);	
 
-	memcpy(msg, &msg_len, sizeof(msg_len));
-	memcpy(msg+sizeof(msg_len), &type, sizeof(type));
-	memcpy(msg+sizeof(msg_len)+sizeof(type), &loc, sizeof(location));
-	msg[total_len] = '\0';
+// 	memcpy(msg, &msg_len, sizeof(msg_len));
+// 	memcpy(msg+sizeof(msg_len), &type, sizeof(type));
+// 	memcpy(msg+sizeof(msg_len)+sizeof(type), &loc, sizeof(location));
+// 	msg[total_len] = '\0';
 
-	printf("send LOC_SUCCESS - msg_size:%u total_len:%u \n", msg_len, total_len);
+// 	printf("send LOC_SUCCESS - msg_size:%u total_len:%u \n", msg_len, total_len);
 
-	int status = send(sockFD, msg, total_len, 0);
+// 	int status = send(sockFD, msg, total_len, 0);
 
-    return status;
-}
+//     return status;
+// }
 
 
 // send LOC_FAILURE, REGISTER_FAILURE, REGISTER_SUCCESS, TERMINATE and UNKNOWN
@@ -672,8 +669,8 @@ void Binder::start(){
 	connections.push_back(binder_sockFD);
     int max_fd = binder_sockFD;
     
+    // continue if TERMINATE msg is not received 
     while (!stop) {
-
     	// setup socket file descriptor and find max value of fd so far 
         fd_set readfds;
 	    FD_ZERO(&readfds);
@@ -789,16 +786,10 @@ void Binder::printList(){
 }
 
 
-
-
-
-
 ////////////////////////////////////////////  MAIN   ///////////////////////////////////////////////////
 
 
 int main(int argc, const char * argv[]) {
-	__INFO("");
-
     Binder binder;
     binder.start();
     return 0;
