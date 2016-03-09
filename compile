@@ -5,4 +5,9 @@ make clean
 make
 
 gcc -L. client1.c -lrpc -pthread -o client
-gcc -L. server_functions.c server_function_skels.c server.c -lrpc -pthread -o server
+gcc -L. server_functions.c server_function_skels.c server.c  -lrpc -pthread -o server
+gcc -L. server_functions.c server_function_skels.c serverA.c  -lrpc -pthread -o serverA
+gcc -L. server_functions.c server_function_skels.c serverB.c  -lrpc -pthread -o serverB
+gcc -L. server_functions.c server_function_skels.c serverC.c  -lrpc -pthread -o serverC
+gcc -L. server_functions.c server_function_skels.c serverD.c  -lrpc -pthread -o serverD
+gcc -L. server_functions.c server_function_skels.c serverE.c  -lrpc -pthread -o serverE

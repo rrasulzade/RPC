@@ -1,4 +1,4 @@
 #!/bin/bash
 
-rm -f *~ server client
+rm -f *~ server client serverA serverB serverC serverD serverE
 make clean
