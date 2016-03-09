@@ -211,7 +211,7 @@ void Binder::proc_location_request(int sockFD, char * message){
     map_it = sig_to_location.find(proc);
 
     try{
-    	if(map_it != sig_to_location.end()){
+    	if(map_it != sig_to_location.end() && map_it->second.size() > 0){
 
     		cout << "*************BEFORE************" << endl;
     		printList();
@@ -239,8 +239,8 @@ void Binder::proc_location_request(int sockFD, char * message){
     	cout << "send LOC_FAILURE" << endl; 
     	cout << proc.procInfo.proc_name <<  " Arglen: " <<  proc.procInfo.argLen <<" -> " << endl;
     	
-    	int code = ERR_RPC_NO_SERVER_AVAIL;
-	    sendResult(sockFD, LOC_FAILURE, code);
+    	// int code = ERR_RPC_NO_SERVER_AVAIL;
+	    sendResult(sockFD, LOC_FAILURE, ERR_RPC_NO_SERVER_AVAIL);
 	    delete [] proc.procInfo.argTypes;
     }
 
@@ -449,6 +449,7 @@ void Binder::checkServers(int socketFD){
 
 
 	if(i >= 0){
+		// remove server socket from vector of active sockets
 		server_sockets.erase(server_sockets.begin() + i);
         
         // remove server from procedure -> server identifier mapping table
