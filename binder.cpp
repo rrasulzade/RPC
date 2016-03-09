@@ -439,6 +439,15 @@ int Binder::getServerIndex(int socketFD){
 // if so erase that entry from the vector
 void Binder::checkServers(int socketFD){
 	int i = getServerIndex(socketFD);
+
+	cout << "INDEX of " <<  socketFD << " -> " << i << endl;
+	cout << "Socket Vector:" << endl; 
+  	for(unsigned int i = 0; i < server_sockets.size(); i++){
+  		cout << "   " << server_sockets[i] << endl;
+  	}
+
+
+
 	if(i > 0){
 		server_sockets.erase(server_sockets.begin() + i);
         
