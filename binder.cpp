@@ -629,9 +629,6 @@ void Binder::start(){
 
 
 
-
-
-
 void Binder::printMap(){
   // debug("print");
   map<ProcSignature, list<ProcLocation> >::iterator map_it = sig_to_location.begin();
