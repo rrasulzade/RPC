@@ -626,7 +626,7 @@ void Binder::start(){
                         // if this is server socket, remove from vector of active server socket
                         // and remove from proc -> server mapping table
                         checkServers(connections[i]);
-                        continue;
+                        // continue;
                     }
                 }
             }
