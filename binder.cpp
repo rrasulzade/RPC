@@ -449,7 +449,7 @@ void Binder::checkServers(int socketFD){
     			cout << "Check " << set_it->socketFD << endl;
     			if(set_it->socketFD == socketFD){
     				cout << "FOUND" << endl;
-    				map_it->second.remove(*set_it);
+    				set_it = map_it->second.remove(*set_it);
     				printMap();
     				cout << "REMOVED" << endl;
     			}
