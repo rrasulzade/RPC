@@ -445,14 +445,14 @@ void Binder::checkServers(int socketFD){
 		map<ProcSignature, list<ProcLocation> >::iterator map_it = sig_to_location.begin();
   		for(; map_it != sig_to_location.end(); map_it++){
     		list<ProcLocation>::iterator set_it = map_it->second.begin();
-    		while(set_it != map_it->second.end()){
+    		for(; set_it != map_it->second.end() ; set_it++){
+    			cout << "Check " << set_it->socketFD << endl;
     			if(set_it->socketFD == socketFD){
     				cout << "FOUND" << endl;
     				map_it->second.remove(*set_it);
+    				printMap();
     				cout << "REMOVED" << endl;
-    				continue;
     			}
-    			set_it++;
     		}
 		}
 	}
