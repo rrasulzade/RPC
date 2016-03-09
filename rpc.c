@@ -911,6 +911,7 @@ int send_to_server (int *server_sock, char *msg, unsigned total_msg_len){
 
 
 
+
 int rcv_from_server (int *server_sock, char *msg_response, unsigned total_msg_len){
 	DEBUG("rcv_from_server() is called...");
 	int bytesRcvd = recv(*server_sock, msg_response, total_msg_len, 0);
