@@ -387,7 +387,7 @@ void Binder::addToServerQueue(list<ProcLocation>& loc_set){
 	list<ProcLocation>::iterator set_it = loc_set.begin();
 	list<ProcLocation>::iterator list_it = server_queue.begin();
 	for(; set_it != loc_set.end(); set_it++){
-		for(; list_it != server_queue.end() && *set_it != *list_it; list_it++);
+		for(; list_it != server_queue.end() && !(*set_it == *list_it); list_it++);
 		if(list_it == server_queue.end())
 			server_queue.push_back(*set_it);
 	}
