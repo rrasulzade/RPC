@@ -445,7 +445,7 @@ void Binder::checkServers(int socketFD){
 		}
 	}
 
-	
+
 }
 
 
@@ -618,7 +618,7 @@ void Binder::start(){
 
                     // erroneous msg is received or connection is closed
                     if (status <= 0 ) {
-                    	cout << "Close connection socket " << endl;
+                    	cout << "Close connection socket " << connections[i] << " index " << i << endl;
                         close(connections[i]);
                         FD_CLR(connections[i], &readfds);
                         connections.erase(connections.begin() + i);
