@@ -136,7 +136,7 @@ int Binder::handle_message(int sockFD){
 	}catch(bad_alloc& e){
 		int code = ERR_BINDER_OUT_OF_MEMORY;
 	    // status = sendResult(sockFD, msgType, NULL, &code);
-	    status = sendResult(sockFD, msgType, code);
+	    status = sendResult(sockFD, msgType, &code);
 	    return status;
 	}	
 
@@ -172,7 +172,7 @@ int Binder::handle_message(int sockFD){
    		{
    			int code =  ERR_RPC_UNEXPECTED_MSG_TYPE;
    			// status = sendResult(sockFD, UNKNOWN, NULL, &code); 	
-   			status = sendResult(sockFD, UNKNOWN, code); 
+   			status = sendResult(sockFD, UNKNOWN, &code); 
    		}
    	}
 
@@ -206,7 +206,7 @@ void Binder::proc_location_request(int sockFD, char * message){
 
     	int code = ERR_BINDER_OUT_OF_MEMORY;
 	    // sendResult(sockFD, LOC_FAILURE, NULL, &code);
-	    sendResult(sockFD, LOC_FAILURE, code);
+	    sendResult(sockFD, LOC_FAILURE, &code);
 	    return;
 	}
 
@@ -243,7 +243,9 @@ void Binder::proc_location_request(int sockFD, char * message){
 	    	     << ntohs(server_location.locationInfo.s_port) << endl << endl;
 
            // sendResult(sockFD, LOC_SUCCESS, &(server_location.locationInfo), NULL);  
-           sendLOC_SUCC(sockFD, server_location.locationInfo);     
+           // sendLOC_SUCC(sockFD, server_location.locationInfo); 
+            sendResult(sockFD, LOC_SUCCESS, &(server_location.locationInfo)); 
+
            delete [] proc.procInfo.argTypes;     
 
     	}else{
@@ -255,7 +257,7 @@ void Binder::proc_location_request(int sockFD, char * message){
     	
     	int code = ERR_RPC_NO_SERVER_AVAIL;
 	    // sendResult(sockFD, LOC_FAILURE, NULL, &code);
-	    sendResult(sockFD, LOC_FAILURE, code);
+	    sendResult(sockFD, LOC_FAILURE, &code);
 	    delete [] proc.procInfo.argTypes;
     }
 
@@ -321,7 +323,7 @@ void Binder::proc_registration(int sockFD, char * message){
 
     	int code = ERR_BINDER_OUT_OF_MEMORY;
 	    // sendResult(sockFD, REGISTER_FAILURE, NULL, &code);
-	    sendResult(sockFD, REGISTER_FAILURE, code);
+	    sendResult(sockFD, REGISTER_FAILURE, &code);
 	    return;
 	}
 
@@ -381,13 +383,13 @@ void Binder::proc_registration(int sockFD, char * message){
 
 	    int code = ERR_RPC_SUCCESS;
         // sendResult(sockFD, REGISTER_SUCCESS, NULL, &code);
-        sendResult(sockFD, REGISTER_SUCCESS, code);
+        sendResult(sockFD, REGISTER_SUCCESS, &code);
 
 	}catch(failure& e){
 		cout << "send FAILURE  <msg_type + msg_size + ERR_RPC_PROC_RE_REG >" << endl;
 		 int code = ERR_RPC_PROC_RE_REG;
         // sendResult(sockFD, REGISTER_FAILURE, NULL, &code);
-		 sendResult(sockFD, REGISTER_FAILURE, code);
+		 sendResult(sockFD, REGISTER_FAILURE, &code);
 	}
 }
 
@@ -436,7 +438,7 @@ int Binder::terminateServers(){
 	for(; v_it != server_sockets.end(); v_it++){
 		int code = ERR_RPC_SUCCESS;
 		// int status = sendResult(*v_it, type, NULL, &code);
-		int status = sendResult(*v_it, type, code);
+		int status = sendResult(*v_it, type, &code);
 		
 		cout << "TERMINATE sent to " << *v_it << endl;
 
@@ -522,41 +524,41 @@ void Binder::removeServer(int socketFD){
 
 // send LOC_FAILURE, REGISTER_FAILURE, REGISTER_SUCCESS, TERMINATE and UNKNOWN
 // message types with return code
-// int Binder::sendResult(int sockFD, int type, location *loc, int* retCode){
-// 	__INFO("");
+int Binder::sendResult(int sockFD, int type, void* data){ //location *loc, int* retCode){
+	__INFO("");
 
-// 	unsigned int msg_len = 0, total_len = sizeof(msg_len) + sizeof(type);
-// 	int status = 0;
-// 	char* msg;
-// 	if(type == LOC_SUCCESS){
-// 		msg_len = sizeof(location);
-// 		total_len += msg_len;
-// 		msg = new char[total_len+1];
-// 		memset(msg, 0, total_len);	
+	unsigned int msg_len = 0, total_len = sizeof(msg_len) + sizeof(type);
+	int status = 0;
+	char* msg;
+	if(type == LOC_SUCCESS){
+		msg_len = sizeof(location);
+		total_len += msg_len;
+		msg = new char[total_len+1];
+		memset(msg, 0, total_len);	
 
-// 		memcpy(msg, &msg_len, sizeof(msg_len));
-// 		memcpy(msg+sizeof(msg_len), &type, sizeof(type));		
-// 		memcpy(msg+sizeof(msg_len)+sizeof(type), loc, sizeof(location));
-// 	}
-// 	else{
-// 		msg_len = sizeof(retCode);
-// 		total_len += msg_len;
-// 		msg = new char[total_len+1];
-// 		memset(msg, 0, total_len);
+		memcpy(msg, &msg_len, sizeof(msg_len));
+		memcpy(msg+sizeof(msg_len), &type, sizeof(type));		
+		memcpy(msg+sizeof(msg_len)+sizeof(type), data, sizeof(location));
+	}
+	else{
+		msg_len = sizeof(int);
+		total_len += msg_len;
+		msg = new char[total_len+1];
+		memset(msg, 0, total_len);
 
-// 		memcpy(msg, &msg_len, sizeof(msg_len));
-// 		memcpy(msg+sizeof(msg_len), &type, sizeof(type));
-// 		memcpy(msg+sizeof(msg_len)+sizeof(type), retCode, sizeof(int));
+		memcpy(msg, &msg_len, sizeof(msg_len));
+		memcpy(msg+sizeof(msg_len), &type, sizeof(type));
+		memcpy(msg+sizeof(msg_len)+sizeof(type), data, sizeof(int));
 		
-// 	}
+	}
 
-// 	msg[total_len] = '\0';
-// 	status = send(sockFD, msg, total_len, 0);
+	msg[total_len] = '\0';
+	status = send(sockFD, msg, total_len, 0);
 
-// 	delete []msg;
+	delete []msg;
 
-// 	return status;
-// }
+	return status;
+}
 
 
 // send LOC_SUCCESS to client with the server location
@@ -586,27 +588,27 @@ int Binder::sendLOC_SUCC(int sockFD, location loc){
 
 // send LOC_FAILURE, REGISTER_FAILURE, REGISTER_SUCCESS, TERMINATE and UNKNOWN
 // message types with return code
-int Binder::sendResult(int sockFD, int type, int retCode){
-	__INFO("");
+// int Binder::sendResult(int sockFD, int type, int retCode){
+// 	__INFO("");
 
-	unsigned int msg_len = sizeof(retCode);
-	unsigned int total_len = sizeof(unsigned int) + sizeof(type) + msg_len;
+// 	unsigned int msg_len = sizeof(retCode);
+// 	unsigned int total_len = sizeof(unsigned int) + sizeof(type) + msg_len;
 
-	char msg[total_len+1];
+// 	char msg[total_len+1];
 
-	memset(msg, 0, total_len);	
+// 	memset(msg, 0, total_len);	
 
-	memcpy(msg, &msg_len, sizeof(msg_len));
-	memcpy(msg+sizeof(msg_len), &type, sizeof(type));
-	memcpy(msg+sizeof(msg_len)+sizeof(type), &retCode, sizeof(retCode));
-	msg[total_len] = '\0';
+// 	memcpy(msg, &msg_len, sizeof(msg_len));
+// 	memcpy(msg+sizeof(msg_len), &type, sizeof(type));
+// 	memcpy(msg+sizeof(msg_len)+sizeof(type), &retCode, sizeof(retCode));
+// 	msg[total_len] = '\0';
 
-	printf("sendResult - msg_size:%u total_len:%u\n", msg_len, total_len);
+// 	printf("sendResult - msg_size:%u total_len:%u\n", msg_len, total_len);
 
-	int status = send(sockFD, msg, total_len, 0);
+// 	int status = send(sockFD, msg, total_len, 0);
 
-	return status;
-}
+// 	return status;
+// }
 
 
 
