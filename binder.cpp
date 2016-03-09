@@ -440,15 +440,15 @@ int Binder::getServerIndex(int socketFD){
 void Binder::checkServers(int socketFD){
 	int i = getServerIndex(socketFD);
 
-	cout << "INDEX of " <<  socketFD << " -> " << i << endl;
-	cout << "Socket Vector:" << endl; 
-  	for(unsigned int i = 0; i < server_sockets.size(); i++){
-  		cout << "   " << server_sockets[i] << endl;
-  	}
+	// cout << "INDEX of " <<  socketFD << " -> " << i << endl;
+	// cout << "Socket Vector:" << endl; 
+ //  	for(unsigned int i = 0; i < server_sockets.size(); i++){
+ //  		cout << "   " << server_sockets[i] << endl;
+ //  	}
 
 
 
-	if(i > 0){
+	if(i >= 0){
 		server_sockets.erase(server_sockets.begin() + i);
         
 		map<ProcSignature, list<ProcLocation> >::iterator map_it = sig_to_location.begin();
