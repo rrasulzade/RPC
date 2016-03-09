@@ -211,11 +211,18 @@ void Binder::proc_location_request(int sockFD, char * message){
     map_it = sig_to_location.find(proc);
 
     try{
-    	if(map_it != sig_to_location.end()){
+    	if(map_it != sig_to_location.end() && map_it->second.size() > 0){
+
+    		cout << "*************BEFORE************" << endl;
+    		printList();
+    		cout << "*******************************" << endl;
+
     		ProcLocation server_location = roundRobinServer(map_it->second);
     		
+    		cout << "*************AFTER*************" << endl;
     		printList();
-    		
+    		cout << "*******************************" << endl;
+
     		cout << "send LOC_SUCCESS" << endl;
     		cout << proc.procInfo.proc_name <<  " Arglen: " <<  proc.procInfo.argLen <<" -> " << endl;
     		cout << "   "
@@ -232,8 +239,8 @@ void Binder::proc_location_request(int sockFD, char * message){
     	cout << "send LOC_FAILURE" << endl; 
     	cout << proc.procInfo.proc_name <<  " Arglen: " <<  proc.procInfo.argLen <<" -> " << endl;
     	
-    	int code = ERR_RPC_NO_SERVER_AVAIL;
-	    sendResult(sockFD, LOC_FAILURE, code);
+    	// int code = ERR_RPC_NO_SERVER_AVAIL;
+	    sendResult(sockFD, LOC_FAILURE, ERR_RPC_NO_SERVER_AVAIL);
 	    delete [] proc.procInfo.argTypes;
     }
 
@@ -352,7 +359,7 @@ void Binder::proc_registration(int sockFD, char * message){
 	    }
 
 	    cout << "send SUCCESS  <msg_type + msg_size + ERR_RPC_SUCCESS >" << endl;
-	    if(!isServer(sockFD)){
+	    if(getServerIndex(sockFD) < 0){
 		    server_sockets.push_back(sockFD);
 	    }
 
@@ -418,23 +425,54 @@ int Binder::terminateServers(){
 
 
 // check whether the given socket is in vector of active server sockets
-bool Binder::isServer(int socketFD){
+int Binder::getServerIndex(int socketFD){
 	for(unsigned int i = 0; i < server_sockets.size(); i++){
 		if(server_sockets[i] == socketFD){
-			return true;
+			return i;
 		}
 	}
-	return false;
+	return -1;
 }
 
 
 // check whether the given socket is in vector of active server sockets
 // if so erase that entry from the vector
 void Binder::checkServers(int socketFD){
-	for(unsigned int i = 0; i < server_sockets.size(); i++){
-		if(server_sockets[i] == socketFD){
-			server_sockets.erase(server_sockets.begin() + i);
-			break;
+	int i = getServerIndex(socketFD);
+
+	// cout << "INDEX of " <<  socketFD << " -> " << i << endl;
+	// cout << "Socket Vector:" << endl; 
+ //  	for(unsigned int i = 0; i < server_sockets.size(); i++){
+ //  		cout << "   " << server_sockets[i] << endl;
+ //  	}
+
+
+
+	if(i >= 0){
+		// remove server socket from vector of active sockets
+		server_sockets.erase(server_sockets.begin() + i);
+        
+        // remove server from procedure -> server identifier mapping table
+		map<ProcSignature, list<ProcLocation> >::iterator map_it = sig_to_location.begin();
+  		for(; map_it != sig_to_location.end(); map_it++){
+    		list<ProcLocation>::iterator set_it = map_it->second.begin();
+    		for(; set_it != map_it->second.end() ; set_it++){
+    			cout << "Check " << set_it->socketFD << endl;
+    			if(set_it->socketFD == socketFD){
+    				cout << "FOUND" << endl;
+    				set_it = map_it->second.erase(set_it);
+    				printMap();
+    				cout << "REMOVED" << endl;
+    			}
+    		}
+		}
+
+		// remove server from server queue for Round Robin
+		list<ProcLocation>::iterator queue_it = server_queue.begin();
+		for(; queue_it != server_queue.end(); queue_it++){
+			if(queue_it->socketFD == socketFD){
+				queue_it = server_queue.erase(queue_it);
+			}
 		}
 	}
 }
@@ -549,13 +587,14 @@ void Binder::start(){
 
     // initially add binder socket to the vector
 	connections.push_back(binder_sockFD);
+    int max_fd = binder_sockFD;
     
     while (!stop) {
 
     	// setup socket file descriptor and find max value of fd so far 
         fd_set readfds;
 	    FD_ZERO(&readfds);
-	    int max_fd = binder_sockFD;
+
 	    for(unsigned int i=0; i < connections.size(); i++){
 	    	FD_SET(connections[i], &readfds);
 	    	if(connections[i] > max_fd){
@@ -596,7 +635,7 @@ void Binder::start(){
                     max_fd = max_fd < connected_sockFD ? connected_sockFD : max_fd;
                 }else{
                     // already accepted, receive msg and capitalaze text
-                    cout << "handle_message " << connected_sockFD << endl;
+                    cout << "handle_message " << connections[i] << endl;
                     status = handle_message(connections[i]);
 
                     // TERMINATE msg is received 
@@ -608,13 +647,16 @@ void Binder::start(){
 
                     // erroneous msg is received or connection is closed
                     if (status <= 0 ) {
-                    	cout << "Close connection socket " << endl;
+                    	cout << "Close connection socket " << connections[i] << " index " << i << endl;
                         close(connections[i]);
                         FD_CLR(connections[i], &readfds);
-                        connections.erase(connections.begin() + i);
-
+                     
                         // if this is server socket, remove from vector of active server socket
+                        // and remove from proc -> server mapping table
                         checkServers(connections[i]);
+
+                        // erase this socket from connections list
+                        connections.erase(connections.begin() + i);
                         continue;
                     }
                 }
@@ -653,7 +695,16 @@ void Binder::printList(){
        << list_it->locationInfo.s_id.addr.hostname << " "     
            << ntohs(list_it->locationInfo.s_port) << endl;
   }
+
+  cout << endl << endl;
+
+  cout << "Socket Vector:" << endl; 
+  for(unsigned int i = 0; i < server_sockets.size(); i++){
+  		cout << "   " << server_sockets[i] << endl;
+  }
+
 }
+
 
 
 

@@ -54,7 +54,7 @@ class Binder{
   	void addToServerQueue(std::list<ProcLocation>& loc_set);
   	void addToServerQueue(ProcLocation& loc);
   	int terminateServers();
-  	bool isServer(int socketFD);
+  	int getServerIndex(int socketFD);
 	void checkServers(int socketFD);
 
 
