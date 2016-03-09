@@ -212,10 +212,17 @@ void Binder::proc_location_request(int sockFD, char * message){
 
     try{
     	if(map_it != sig_to_location.end()){
+
+    		cout << "*************BEFORE************" << endl;
+    		printList();
+    		cout << "*******************************" << endl;
+
     		ProcLocation server_location = roundRobinServer(map_it->second);
     		
+    		cout << "*************AFTER*************" << endl;
     		printList();
-    		
+    		cout << "*******************************" << endl;
+
     		cout << "send LOC_SUCCESS" << endl;
     		cout << proc.procInfo.proc_name <<  " Arglen: " <<  proc.procInfo.argLen <<" -> " << endl;
     		cout << "   "
@@ -653,7 +660,16 @@ void Binder::printList(){
        << list_it->locationInfo.s_id.addr.hostname << " "     
            << ntohs(list_it->locationInfo.s_port) << endl;
   }
+
+  cout << endl << endl;
+
+  for(int i = 0; i < server_sockets.size(); i++){
+	  cout << "Socket Vector:" << endl; 
+  		cout << "   " << server_sockets[i] << endl;
+  }
+
 }
+
 
 
 
