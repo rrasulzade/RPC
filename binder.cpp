@@ -359,7 +359,7 @@ void Binder::proc_registration(int sockFD, char * message){
 	    }
 
 	    cout << "send SUCCESS  <msg_type + msg_size + ERR_RPC_SUCCESS >" << endl;
-	    if(!isServer(sockFD)){
+	    if(getServerIndex(sockFD) < 0){
 		    server_sockets.push_back(sockFD);
 	    }
 
@@ -425,27 +425,33 @@ int Binder::terminateServers(){
 
 
 // check whether the given socket is in vector of active server sockets
-bool Binder::isServer(int socketFD){
+int Binder::getServerIndex(int socketFD){
 	for(unsigned int i = 0; i < server_sockets.size(); i++){
 		if(server_sockets[i] == socketFD){
-			return true;
+			return i;
 		}
 	}
-	return false;
+	return -1;
 }
 
 
 // check whether the given socket is in vector of active server sockets
 // if so erase that entry from the vector
 void Binder::checkServers(int socketFD){
-	for(unsigned int i = 0; i < server_sockets.size(); i++){
-		if(server_sockets[i] == socketFD){
-			server_sockets.erase(server_sockets.begin() + i);
-			break;
+	int i = getServerIndex(socketFD);
+	if(i > 0){
+		server_sockets.erase(server_sockets.begin() + i);
+        
+		map<ProcSignature, list<ProcLocation> >::iterator map_it = sig_to_location.begin();
+  		for(; map_it != sig_to_location.end(); map_it++){
+    		list<ProcLocation>:: iterator set_it = map_it->second.begin();
+    		for(; set_it != map_it->second.end(); set_it++){
+    			if(set_it->socketFD == socketFD){
+    				map_it->second.remove(*set_it);
+    			}
+    		}
 		}
 	}
-
-
 }
 
 
@@ -621,11 +627,13 @@ void Binder::start(){
                     	cout << "Close connection socket " << connections[i] << " index " << i << endl;
                         close(connections[i]);
                         FD_CLR(connections[i], &readfds);
-                        connections.erase(connections.begin() + i);
-
+                     
                         // if this is server socket, remove from vector of active server socket
                         // and remove from proc -> server mapping table
                         checkServers(connections[i]);
+
+                        // erase this socket from connections list
+                        connections.erase(connections.begin() + i);
                         continue;
                     }
                 }
