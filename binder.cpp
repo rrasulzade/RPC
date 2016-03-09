@@ -606,7 +606,7 @@ void Binder::start(){
                     max_fd = max_fd < connected_sockFD ? connected_sockFD : max_fd;
                 }else{
                     // already accepted, receive msg and capitalaze text
-                    cout << "handle_message " << connected_sockFD << endl;
+                    cout << "handle_message " << connections[i] << endl;
                     status = handle_message(connections[i]);
 
                     // TERMINATE msg is received 
