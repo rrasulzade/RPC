@@ -445,7 +445,7 @@ void Binder::checkServers(int socketFD){
 		}
 	}
 
-
+	
 }
 
 
@@ -621,12 +621,12 @@ void Binder::start(){
                     	cout << "Close connection socket " << endl;
                         close(connections[i]);
                         FD_CLR(connections[i], &readfds);
-                        //connections.erase(connections.begin() + i);
+                        connections.erase(connections.begin() + i);
 
                         // if this is server socket, remove from vector of active server socket
                         // and remove from proc -> server mapping table
                         checkServers(connections[i]);
-                        // continue;
+                        continue;
                     }
                 }
             }
