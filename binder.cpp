@@ -125,38 +125,23 @@ int recvMsg(int sockFD, char buff[], unsigned int msg_len){
 int Binder::handle_message(int sockFD){
 	__INFO("");
 
-    unsigned int msg_len = 0 , totalBytesRcvd = 0;
+    unsigned int msg_len = 0;
     int msgType;
     int status;
     char *msg;
      
     // receive message len
-    char len[sizeof(int)];
-    status = recvMsg(sockFD, len, sizeof(int));
+    char m_len[sizeof(unsigned int)];
+    status = recvMsg(sockFD, m_len, sizeof(unsigned int));
     if(status <= 0) return status;
-	memcpy(&msg_len, len, sizeof(int));
-
-
- //    while(totalBytesRcvd < sizeof(msg_len)){
-	//     status = recv(sockFD, &msg_len, sizeof(msg_len), 0);
-	//     if(status <= 0){
-	//     	cerr << "ERROR: on receiving message length" << endl;
-	//     	return status;
-	//    	}
-	//    	totalBytesRcvd += status;
-	// }
+	memcpy(&msg_len, m_len, sizeof(unsigned int));
 
 
    	// receive message type
-   	totalBytesRcvd = 0;
-   	while(totalBytesRcvd < sizeof(msgType)){
-	   	status = recv(sockFD, &msgType, sizeof(msgType), 0);
-	   	if(status <= 0){
-	    	cerr << "ERROR: on receiving message type" << endl;
-	    	return status;
-	   	}
-	   	totalBytesRcvd += status;
-	}
+   	char m_type[sizeof(int)];
+    status = recvMsg(sockFD, m_type, sizeof(int));
+    if(status <= 0) return status;
+	memcpy(&msgType, m_type, sizeof(int));
 
    	// handle memory allocation error
    	try{
@@ -169,17 +154,11 @@ int Binder::handle_message(int sockFD){
 	}	
 
 	// receive message
-	totalBytesRcvd = 0;
-   	while(totalBytesRcvd < msg_len){ 
-		status = recv(sockFD, msg, msg_len, 0);				    
-		if(status <= 0){  
-	    	cerr << "ERROR: on receiving message" << endl;
-	    	delete [] msg;
-	    	return status;
-	   	}
-	   	totalBytesRcvd += status;
-	}
-
+	status = recvMsg(sockFD, msg, msg_len);
+    if(status <= 0){
+    	delete [] msg;
+     	return status;
+     }
    	msg[msg_len] = '\0';  
 
 
