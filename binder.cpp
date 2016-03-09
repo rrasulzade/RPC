@@ -103,23 +103,32 @@ Binder::~Binder(void){
 int Binder::handle_message(int sockFD){
 	__INFO("");
 
-    unsigned int msg_len = 0;
+    unsigned int msg_len = 0 , totalBytesRcvd = 0;
     int msgType;
+    int status;
     char *msg;
      
     // receive message len
-    int status = recv(sockFD, &msg_len, sizeof(msg_len), 0);
-    if(status <= 0){
-    	cerr << "ERROR: on receiving message length" << endl;
-    	return status;
-   	}
+    while(totalBytesRcvd < sizeof(msg_len)){
+	    status = recv(sockFD, &msg_len, sizeof(msg_len), 0);
+	    if(status <= 0){
+	    	cerr << "ERROR: on receiving message length" << endl;
+	    	return status;
+	   	}
+	   	totalBytesRcvd += status;
+	}
+
 
    	// receive message type
-   	status = recv(sockFD, &msgType, sizeof(msgType), 0);
-   	if(status <= 0){
-    	cerr << "ERROR: on receiving message type" << endl;
-    	return status;
-   	}
+   	totalBytesRcvd = 0;
+   	while(totalBytesRcvd < sizeof(msgType)){
+	   	status = recv(sockFD, &msgType, sizeof(msgType), 0);
+	   	if(status <= 0){
+	    	cerr << "ERROR: on receiving message type" << endl;
+	    	return status;
+	   	}
+	   	totalBytesRcvd += status;
+	}
 
    	// handle memory allocation error
    	try{
@@ -131,25 +140,22 @@ int Binder::handle_message(int sockFD){
 	    return status;
 	}	
 
-	// receive message 
-	status = recv(sockFD, msg, msg_len, 0);				    
-	if(status <= 0){  
-    	cerr << "ERROR: on receiving message" << endl;
-    	delete [] msg;
-    	return status;
-   	}
+	// receive message
+	totalBytesRcvd = 0;
+   	while(totalBytesRcvd < msg_len){ 
+		status = recv(sockFD, msg, msg_len, 0);				    
+		if(status <= 0){  
+	    	cerr << "ERROR: on receiving message" << endl;
+	    	delete [] msg;
+	    	return status;
+	   	}
+	   	totalBytesRcvd += status;
+	}
+
    	msg[msg_len] = '\0';  
 
 
-   	DEBUG("handle_message memory - msg_size:%u total_len:%lu", msg_len, msg_len+sizeof(msg_len)+sizeof(msgType));
-
-   	 // msgType = *(int*)(msg);
-
-    // connection is closed
-   	// if(status == 0){
-   	// 	delete msg;
-   	// 	return status;
-   	// }
+   	// DEBUG("handle_message memory - msg_size:%u total_len:%lu", msg_len, msg_len+sizeof(msg_len)+sizeof(msgType));
 
    	switch(msgType){
    		case REGISTER:
@@ -385,6 +391,7 @@ void Binder::proc_registration(int sockFD, char * message){
 	}
 }
 
+
 // adds the given server location to the server queue, if they are
 // not on the queue
 void Binder::addToServerQueue(ProcLocation& loc){
@@ -398,6 +405,7 @@ void Binder::addToServerQueue(ProcLocation& loc){
 
 	server_queue.push_back(loc);
 }
+
 
 // adds the first and the second servers in the set of locations 
 // mapped by the same procedure to the server queue if they are not 
@@ -488,29 +496,29 @@ void Binder::removeServer(int socketFD){
 
 
 
-int sendTo(int sockFD, unsigned int msg_len, int type, void* data){
+// int sendTo(int sockFD, unsigned int msg_len, int type, void* data){
 
-	unsigned int total_len = sizeof(msg_len) + sizeof(type) + msg_len;
-	char msg[total_len+1];
+// 	unsigned int total_len = sizeof(msg_len) + sizeof(type) + msg_len;
+// 	char msg[total_len+1];
 	
-	memset(msg, 0, total_len);	
+// 	memset(msg, 0, total_len);	
 
-	memcpy(msg, &msg_len, sizeof(msg_len));
-	memcpy(msg+sizeof(msg_len), &type, sizeof(type));
-	if(type == LOC_SUCCESS){
-		memcpy(msg+sizeof(msg_len)+sizeof(type), data, sizeof(location));
-	}else{
-		memcpy(msg+sizeof(msg_len)+sizeof(type), data, sizeof(int));
-	}
+// 	memcpy(msg, &msg_len, sizeof(msg_len));
+// 	memcpy(msg+sizeof(msg_len), &type, sizeof(type));
+// 	if(type == LOC_SUCCESS){
+// 		memcpy(msg+sizeof(msg_len)+sizeof(type), data, sizeof(location));
+// 	}else{
+// 		memcpy(msg+sizeof(msg_len)+sizeof(type), data, sizeof(int));
+// 	}
 
-	msg[total_len] = '\0';
+// 	msg[total_len] = '\0';
 
-	printf("sendTo- msg_size:%u total_len:%u \n", msg_len, total_len);
+// 	printf("sendTo- msg_size:%u total_len:%u \n", msg_len, total_len);
 
-	int status = send(sockFD, msg, total_len, 0);
+// 	int status = send(sockFD, msg, total_len, 0);
 
-    return status;
-}
+//     return status;
+// }
 
 // send LOC_FAILURE, REGISTER_FAILURE, REGISTER_SUCCESS, TERMINATE and UNKNOWN
 // message types with return code
