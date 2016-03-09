@@ -15,9 +15,6 @@ struct failure : public std::exception {
   const char* what() const throw() {return "FAILURE!";}
 };
 
-struct success : public std::exception {
-  const char* what() const throw() {return "SUCCESS!";}
-};
 
 struct ProcSignature{
 	proc_sig procInfo;

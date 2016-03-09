@@ -207,14 +207,14 @@ void Binder::proc_location_request(int sockFD, char * message){
 			proc.procInfo.argTypes[i] = (proc.procInfo.argTypes[i] & 0xffff0000) + 0x00000001;
 	}
 
-	
-
 	map<ProcSignature, list<ProcLocation> >::iterator map_it;
     map_it = sig_to_location.find(proc);
 
     try{
     	if(map_it != sig_to_location.end()){
     		ProcLocation server_location = roundRobinServer(map_it->second);
+    		
+    		printList();
     		
     		cout << "send LOC_SUCCESS" << endl;
     		cout << proc.procInfo.proc_name <<  " Arglen: " <<  proc.procInfo.argLen <<" -> " << endl;
@@ -297,8 +297,8 @@ void Binder::proc_registration(int sockFD, char * message){
 	}catch(bad_alloc& e){
 		cout << "send REG_FAILURE  ERR_BINDER_OUT_OF_MEMORY" << endl; 
 
-    	int code = ERR_BINDER_OUT_OF_MEMORY;
-	    sendResult(sockFD, REGISTER_FAILURE, code);
+    	// int code = ERR_BINDER_OUT_OF_MEMORY;
+	    sendResult(sockFD, REGISTER_FAILURE, ERR_BINDER_OUT_OF_MEMORY);
 	    return;
 	}
 
@@ -651,7 +651,7 @@ void Binder::printList(){
   for(;list_it != server_queue.end(); list_it++){
     cout << "   "
        << list_it->locationInfo.s_id.addr.hostname << " "     
-           << list_it->locationInfo.s_port << endl;
+           << ntohs(list_it->locationInfo.s_port) << endl;
   }
 }
 
