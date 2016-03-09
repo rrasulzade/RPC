@@ -663,8 +663,8 @@ void Binder::printList(){
 
   cout << endl << endl;
 
+  cout << "Socket Vector:" << endl; 
   for(unsigned int i = 0; i < server_sockets.size(); i++){
-	  cout << "Socket Vector:" << endl; 
   		cout << "   " << server_sockets[i] << endl;
   }
 
