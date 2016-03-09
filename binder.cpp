@@ -451,6 +451,7 @@ void Binder::checkServers(int socketFD){
 	if(i >= 0){
 		server_sockets.erase(server_sockets.begin() + i);
         
+        // remove server from procedure -> server identifier mapping table
 		map<ProcSignature, list<ProcLocation> >::iterator map_it = sig_to_location.begin();
   		for(; map_it != sig_to_location.end(); map_it++){
     		list<ProcLocation>::iterator set_it = map_it->second.begin();
@@ -463,6 +464,14 @@ void Binder::checkServers(int socketFD){
     				cout << "REMOVED" << endl;
     			}
     		}
+		}
+
+		// remove server from server queue for Round Robin
+		list<ProcLocation>::iterator queue_it = server_queue.begin();
+		for(; queue_it != server_queue.end(); queue_it++){
+			if(queue_it->socketFD == socketFD){
+				queue_it = server_queue.erase(queue_it);
+			}
 		}
 	}
 }
