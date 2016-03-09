@@ -444,6 +444,8 @@ void Binder::checkServers(int socketFD){
 			break;
 		}
 	}
+
+
 }
 
 
@@ -556,13 +558,14 @@ void Binder::start(){
 
     // initially add binder socket to the vector
 	connections.push_back(binder_sockFD);
+    int max_fd = binder_sockFD;
     
     while (!stop) {
 
     	// setup socket file descriptor and find max value of fd so far 
         fd_set readfds;
 	    FD_ZERO(&readfds);
-	    int max_fd = binder_sockFD;
+
 	    for(unsigned int i=0; i < connections.size(); i++){
 	    	FD_SET(connections[i], &readfds);
 	    	if(connections[i] > max_fd){
@@ -618,9 +621,10 @@ void Binder::start(){
                     	cout << "Close connection socket " << endl;
                         close(connections[i]);
                         FD_CLR(connections[i], &readfds);
-                        connections.erase(connections.begin() + i);
+                        //connections.erase(connections.begin() + i);
 
                         // if this is server socket, remove from vector of active server socket
+                        // and remove from proc -> server mapping table
                         checkServers(connections[i]);
                         continue;
                     }
