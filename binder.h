@@ -49,7 +49,7 @@ class Binder{
     // int sendLOC_SUCC(int sockFD, location loc);
     // int sendResult(int sockFD, int type, int retCode);
 
-    int sendResult(int sockFD, int type, void* data);
+    // int sendResult(int sockFD, int type, void* data);
 
     void proc_registration(int sockFD, char * message);
     void proc_location_request(int sockFD, char * message);
