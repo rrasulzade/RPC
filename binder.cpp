@@ -469,7 +469,7 @@ int Binder::terminateServers(){
 			cerr << "ERROR: on terminating servers"<< endl; 			
 		}
 	}
-	return TERMINATE_ALL;
+	return ERR_BINDER_TERMINATE_SIG;
 }
 
 
@@ -540,14 +540,14 @@ void Binder::setup_socket(){
     binder_sockFD = socket(AF_INET, SOCK_STREAM, 0);
     if (binder_sockFD < 0) {
         cerr << "ERROR: server socket cannot initialized" << endl;
-        exit(-1);
+        return;
     }
     
     // bind the binder socket to the current IP address on port
     status = bind(binder_sockFD, (struct sockaddr*)&binder_sockaddr, (socklen_t)len);
     if(status < 0){
         cerr << "ERROR: on binding" << endl;
-        exit(-1);
+        return;
     }
     
     // Listen for SOMAXCONN = 128 clients
@@ -599,7 +599,7 @@ void Binder::start(){
         int active_clients = select( max_fd + 1 , &readfds , NULL , NULL , NULL);
         if (active_clients < 0){
             cerr << "ERROR: on select()"<< endl;
-            exit(-1);
+            return;
         }
         
         // no updates
@@ -618,7 +618,7 @@ void Binder::start(){
                     connected_sockFD = accept(binder_sockFD, (sockaddr*)&connected_sockaddr, (socklen_t *)&len);
                     if (connected_sockFD < 0) {
                         cerr << "ERROR: on accept()" << endl;
-                        exit(-1);
+                        return;
                     }
 
                     cout << "New conncetion " << connected_sockFD << endl;
