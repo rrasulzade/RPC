@@ -197,12 +197,12 @@ void f3_call (){
 
 void f3a_call (){
   /* prepare the arguments for f3 */
-  long a3[6] = {6, 107, 103, 105, 109, 101}; // 102, 104, 106, 108, 110};
+  long a3[15] = {15, 107, 103, 105, 109, 101, 102, 104, 106, 108, 110, 70, 43, 23, 65};
   int count3 = 1;
   int argTypes3[count3 + 1];
   void **args3;
 
-  argTypes3[0] = (1 << ARG_OUTPUT) | (1 << ARG_INPUT) | (ARG_LONG << 16) | 6;
+  argTypes3[0] = (1 << ARG_OUTPUT) | (1 << ARG_INPUT) | (ARG_LONG << 16) | 15;
   argTypes3[1] = 0;
 
   args3 = (void **)malloc(count3 * sizeof(void *));
@@ -212,13 +212,13 @@ void f3a_call (){
   int s3 = rpcCall("f3", argTypes3, args3);
   /* test the return of f3 */
   printf(
-    "\nEXPECTED return of f3 is: 109 107 105 103 101 6\n"
+    "\nEXPECTED return of f3 is: 109 107 105 103 101 11\n"
   );
 
   if (s3 >= 0) {
     printf("ACTUAL return of f3 is: ");
     int i;
-    for (i = 0; i < 6; i++) {
+    for (i = 0; i < 15; i++) {
       printf(" %ld", *(((long *)args3[0]) + i));
     }
     printf("\n");
