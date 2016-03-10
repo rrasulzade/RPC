@@ -32,8 +32,7 @@ bool operator==(const ProcSignature& lhs, const ProcSignature& rhs) {
 		return false;
 	}
 	if(str_compare == 0){
-		if(lhs.procInfo.argLen != rhs.procInfo.argLen || 
-		   	(lhs.procInfo.argLen == rhs.procInfo.argLen && 
+		if(lhs.procInfo.argLen != rhs.procInfo.argLen || (lhs.procInfo.argLen == rhs.procInfo.argLen && 
 			memcmp(lhs.procInfo.argTypes, rhs.procInfo.argTypes, (lhs.procInfo.argLen+1)*sizeof(int)) != 0) )
 			return false;
 
@@ -50,8 +49,7 @@ bool operator< (const ProcSignature& lhs, const ProcSignature& rhs){
 		return false;
 	}
 	if(str_compare == 0){
-		if(lhs.procInfo.argLen > rhs.procInfo.argLen || 
-		   	(lhs.procInfo.argLen == rhs.procInfo.argLen && 
+		if(lhs.procInfo.argLen > rhs.procInfo.argLen || (lhs.procInfo.argLen == rhs.procInfo.argLen && 
 			memcmp(lhs.procInfo.argTypes, rhs.procInfo.argTypes, (lhs.procInfo.argLen+1)*sizeof(int)) >= 0) ){
 				return false;
 		}
@@ -203,7 +201,8 @@ int Binder::handle_message(int sockFD){
    			proc_location_request(sockFD, msg);
    			break;
    		case LOC_REQUEST_CACHE:
-   				
+   			proc_cache_request(sockFD, msg);
+   			break;	
    		case TERMINATE:
    			status = terminateServers();							 
    			break;
@@ -218,6 +217,14 @@ int Binder::handle_message(int sockFD){
     return status;
 }
 
+
+
+void proc_cache_request(int sockFD, char * message){
+
+
+
+
+}
 
 
 // handle requests from client that needs the server location
@@ -300,6 +307,8 @@ void Binder::proc_location_request(int sockFD, char* message){
 
 }
 
+
+// simplified Round Robin algorithm to choose the next available server
 ProcLocation Binder::roundRobinServer(list<ProcLocation>& loc_set){
 	if (loc_set.size() == 1){
 		return *(loc_set.begin());
@@ -320,6 +329,9 @@ ProcLocation Binder::roundRobinServer(list<ProcLocation>& loc_set){
 }
 
 
+// registers procedure that is sent by the server
+// send REGISTER_SUCCESS if procedure has not already registered,
+// otherwise, send REGISTER_FAILURE to the server
 void Binder::proc_registration(int sockFD, char * message){
 	ProcSignature proc;
 	ProcLocation loc;
@@ -565,6 +577,7 @@ void Binder::setup_socket(){
     getsockname(binder_sockFD, (struct sockaddr *)&sock_in, (socklen_t *)&len);
     cout << "export BINDER_PORT=" << ntohs(sock_in.sin_port) << endl;
 }
+
 
 
 void Binder::start(){
