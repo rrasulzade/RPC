@@ -59,14 +59,14 @@ int create_listening_sock(){
 	
 	if (listening_sock == -1) {
 		ERROR("ERROR: could not create a listening socket! Exiting...");
-		return ERR_RPC_SOCKET_FAILED;
+		return ERR_RPC_SERVER_SOCK_FAILED;
 	}
 	
 	// bind the socket to the sockaddr
 	int ret = bind(listening_sock, (struct sockaddr *) &server, sizeof(server));
 	if (ret != 0){
 		ERROR("ERROR: could not bind the listening socket! Exiting...");
-		return ERR_RPC_SOCKET_FAILED;
+		return ERR_RPC_SERVER_SOCK_FAILED;
 	}
 	
 	// start listening to be able to accept connection requests
@@ -89,7 +89,7 @@ int create_binder_sock(){
 	binder_sock = socket (AF_INET, SOCK_STREAM, 0);
 	if (binder_sock == -1) {
 		ERROR("ERROR: could not create a binder_socket!!! Exiting...");
-		return ERR_RPC_SOCKET_FAILED;
+		return ERR_RPC_BINDER_SOCK_FAILED;
 	}
 	
 	// get the hostname of the binder from the environment variable
@@ -114,7 +114,7 @@ int create_binder_sock(){
 	// connect to the binder
 	if (connect (binder_sock, (struct sockaddr *)&binder, sizeof(binder)) < 0) {
 		ERROR("ERROR: Could not connect to the binder! Exiting...");
-		return ERR_RPC_SOCKET_FAILED;
+		return ERR_RPC_BINDER_SOCK_FAILED;
 	}
 	
 	DEBUG("create_binder_sock is returning. binder_sock=%d", binder_sock);
@@ -140,7 +140,10 @@ int setup_my_loc(){
 	int addrlen = sizeof(struct sockaddr_in);
 	struct sockaddr_in s;
 	memset(&s, 0, sizeof(struct sockaddr_in));
-	getsockname (listening_sock, (struct sockaddr *)&s, (socklen_t*)&addrlen);
+	if (getsockname (listening_sock, (struct sockaddr *)&s, (socklen_t*)&addrlen) < 0){
+		DEBUG("returning  ERR_RPC_SERVER_SOCK_FAILED");
+		return ERR_RPC_SERVER_SOCK_FAILED;
+	}
 	my_loc.s_port = s.sin_port;
 	
 	DEBUG("SERVER_PORT %d", ntohs(my_loc.s_port));
@@ -343,8 +346,8 @@ int handle_request (int sock){
 		ERROR("Returning ERR_RPC_UNREGISTERED_PROC");
 		return ERR_RPC_UNREGISTERED_PROC;
 	}
-	void **args = (void**)malloc(sig.argLen*(sizeof(void*)));
-	void **args_origin = (void**)malloc(sig.argLen*(sizeof(void*)));
+	void **args 		= (void**)malloc(sig.argLen*(sizeof(void*)));
+	void **args_origin 	= (void**)malloc(sig.argLen*(sizeof(void*)));
 	if (args == NULL || args_origin == NULL) {
 		send_error_msg (msg_req, ERR_RPC_OUT_OF_MEMORY, sock);
 		free(msg_req);
@@ -510,7 +513,7 @@ int accept_new_connection () {
 	int new_sock = accept(listening_sock, (struct sockaddr *)&client, (socklen_t*)&addrlen);
 	if (new_sock < 0) {
 		ERROR("accept_new_connection () is returning...accept failed");
-		return ERR_RPC_SOCKET_FAILED;
+		return ERR_RPC_SERVER_SOCK_FAILED;
 	}
 	DEBUG("accept_new_connection () is returning...new_sock=%d", new_sock);
 	// Accept is successful. Push the socket into the queue so that the worker threads can serve
@@ -540,14 +543,14 @@ int check_termination_protocol(int *termination){
 	DEBUG("bytesRcvd=%d", bytesRcvd);
 	if (bytesRcvd < 0) {
 		ERROR("ERROR: bytes rcvd is negative!");
-		return ERR_RPC_SOCKET_FAILED;
+		return ERR_RPC_BINDER_SOCK_FAILED;
 	}
 	
 	bytesRcvd = recv(binder_sock, &reason_code, 4, 0);
 	DEBUG("bytesRcvd=%d", bytesRcvd);
 	if (bytesRcvd < 0) {
 		ERROR("ERROR: bytes rcvd is negative!");
-		return ERR_RPC_SOCKET_FAILED;
+		return ERR_RPC_BINDER_SOCK_FAILED;
 	}
 	
 	if (msg_type != TERMINATE){
@@ -577,24 +580,26 @@ int select_list_setup (fd_set *fds) {
 
 
 // process sockets that are active
-void process_sockets (fd_set *fds, int *termination) {
+static inline int process_sockets (fd_set *fds, int *termination) {
 	DEBUG("process_sockets () is called...");
+	int ret = ERR_RPC_SUCCESS;
 	if (FD_ISSET (listening_sock, fds)) {
-		accept_new_connection ();
+		/*ret = */accept_new_connection ();
 	}
 	if (FD_ISSET (binder_sock, fds)) {
-		check_termination_protocol (termination);
+		ret = check_termination_protocol (termination);
 	}
+	return ret;
 	DEBUG("process_sockets () is returning...");
 }
 
 
 
-int terminate_worker_threads (){
+static inline int terminate_worker_threads (){
 	DEBUG("terminate_worker_threads () is called...");
 	// send termination signal to worker threads
 	for (int i = 0; i < NUM_THREADS; i++){
-		queue_push (&intQ, -1);
+		if (queue_push (&intQ, -1)) return ERR_RPC_OUT_OF_MEMORY;
 	}
 	
 	// wait for workers' termination
@@ -614,7 +619,7 @@ int rpcExecute(){
 		ERROR("rpcExecute() is returning Exec is called before reg...");
 		return ERR_RPC_EXEC_BEFORE_REG;
 	}
-	int termination = 0;
+	int termination = 0, ret_code = ERR_RPC_SUCCESS;
 	int highest_sock, num_active_socks;
 	fd_set fds;
 	
@@ -625,11 +630,12 @@ int rpcExecute(){
 		DEBUG("select() returned! num_active_socks=%d", num_active_socks);
 		if (num_active_socks < 0) {
 			ERROR("ERROR: Select returned error! No active sockets! Exiting...");
-			return ERR_RPC_SOCKS_INACTIVE;
+			ret_code = ERR_RPC_SOCKS_INACTIVE;
+			break;
 		}
 		else if (num_active_socks != 0) {
-			process_sockets (&fds, &termination);
-			if (termination) break;
+			ret_code = process_sockets (&fds, &termination);
+			if (termination || ret_code) break;
 		}
 	}
 	
@@ -643,7 +649,7 @@ int rpcExecute(){
 	// if there is something left in the queue, then clean
 	queue_reset (&intQ);
 	DEBUG("rpcExecute() is returning...");
-	return 0;
+	return ret_code;
 }
 
 
@@ -765,12 +771,11 @@ int binder_registration(char* name, int argLen, int* argTypes){
 	int ret = binder_reg_send_rcv(msg, total_len);
 	free(msg);
 	if (ret) {
-		ERROR("binder_registration returns ret=%d", ret);
-		return ret;
+		ERROR("binder_reg_send_rcv returned ret=%d", ret);
 	}
 	
-	DEBUG("binder_registration is returning successfully...");
-	return ERR_RPC_SUCCESS;
+	DEBUG("binder_registration is returning ...");
+	return ret;
 }
 
 
@@ -889,7 +894,7 @@ int create_server_connection (int *server_sock, location *server_loc){
 	
 	if (connect (*server_sock, (struct sockaddr *)&server, sizeof(server)) < 0) {
 		ERROR("ERROR: Could not connect to the server! Exiting...");
-		return ERR_RPC_SOCKET_FAILED;
+		return ERR_RPC_SERVER_SOCK_FAILED;
 	}
 	
 	DEBUG("create_server_connection() is returning... server_sock=%d", *server_sock);
@@ -903,7 +908,7 @@ int send_to_server (int *server_sock, char *msg, unsigned total_msg_len){
 	int ret = send (*server_sock, msg, total_msg_len, 0);
 	if (ret < 0){
 		ERROR("send_to_server() is returning ERR_RPC_SOCKET_FAILED");
-		return ERR_RPC_SOCKET_FAILED;
+		return ERR_RPC_SERVER_SOCK_FAILED;
 	}
 	DEBUG("send_to_server() is returning... send => ret=%d", ret);
 	return ERR_RPC_SUCCESS;
@@ -917,7 +922,7 @@ int rcv_from_server (int *server_sock, char *msg_response, unsigned total_msg_le
 	int bytesRcvd = recv(*server_sock, msg_response, total_msg_len, 0);
 	if (bytesRcvd < 0){
 		ERROR("rcv_from_server() is returning ERR_RPC_SOCKET_FAILED");
-		return ERR_RPC_SOCKET_FAILED;
+		return ERR_RPC_SERVER_SOCK_FAILED;
 	}
 	DEBUG("rcv_from_server() is returning... bytesRcvd=%d", bytesRcvd);
 	return ERR_RPC_SUCCESS;
