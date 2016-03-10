@@ -1,2 +1,24 @@
-          CS454 Assignment 3
-Rasul Rasulzade ------ Nurlan Masimli
+                            CS454 Assignment 3
+Rasul Rasulzade (rrasulza 2048806) ------ Nurlan Masimli (nmasimli 204)
+
+Binder is implemented in C++ and compiled with "g++" (works on the student server).
+Rpc is implemented in C and compiled with ?????  (works on the student server).
+
+The Make file is written for the GNU Make 3.81 (the version on the student server).
+
+First of all run 'make' to compile binder.cc and generate RPC library.
+Also, 'make binder' compiles binder.cpp separately.
+
+Now, run ./binder, and copy BINDER_ADDRESS and BINDER_PORT which is used in other 
+machines to connecting to the binder.
+
+To compile client use:
+g++ -L. client.o -lrpc -o client
+then run it with: ./client
+
+To compile server use:
+g++ -L. server_functions.o server_function_skels.o server.o -lrpc -lpthread -o server
+then run it with: ./server
+
+pthreads library is used for RPC library.
+

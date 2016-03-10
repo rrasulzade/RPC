@@ -24,6 +24,15 @@
 #include "rpc.h"
 
 
+// Definitions for Cache implementation
+#define		CACHE_SIZE		64
+struct locations {
+	location loc_arr[CACHE_SIZE];
+	int next_index;
+	int num_valid_entries;
+};
+
+
 
 // these are modified only in register and init stages.
 // Multiple threads accessing these data is ok during execution of rpcExecute()
@@ -38,6 +47,10 @@ static intQueue intQ;
 // worker threads to be able to handle multiple requests at a time
 static pthread_t worker_threads[NUM_THREADS];
 
+
+
+// Cache
+static struct locations loc_cache;
 
 
 /* 	
@@ -200,6 +213,18 @@ unsigned find_args_size (unsigned arglen, int* argTypes, unsigned *arg_sizes) {
 
 
 
+unsigned find_args_total_size (unsigned arglen, int* argTypes) {
+	//DEBUG("find_args_size is called");
+	unsigned total_arg_size = 0;
+	for (unsigned i = 0; i < arglen; i++) {
+		total_arg_size += size_of_arg (argTypes[i]);
+	}
+	//DEBUG("find_args_size is returning");
+	return total_arg_size;
+}
+
+
+
 int unmarshall_args_no_alloc (unsigned arglen, int *argTypes, char *args_buff, void **args) {
 	//DEBUG("unmarshall_args_no_alloc is called    arglen=%d", arglen);
 	unsigned size_arg = 0;
@@ -302,8 +327,8 @@ char *proc_sig_unmarshal (proc_sig *sig, char *msg_offset){
 int handle_request (int sock){
 	DEBUG("handle_request is called");
 	// receive the data and reply with the response
-	unsigned msg_len = 0;
-	int bytesRcvd = 0, msg_type = 0, response_len = 0, ret_code = ERR_RPC_SUCCESS;
+	unsigned msg_len = 0, total_len = 0;
+	int bytesRcvd = 0, msg_type = 0, ret_code = ERR_RPC_SUCCESS;
 	
 	bytesRcvd = recv(sock, &msg_len, 4, 0);
 	if (bytesRcvd < 0) {
@@ -317,8 +342,10 @@ int handle_request (int sock){
 		return ERR_RPC_SOCKET_FAILED;
 	}
 	
-	char *msg_req = malloc(sizeof(unsigned) + sizeof(int) + msg_len);
+	total_len = sizeof(unsigned) + sizeof(int) + msg_len;
+	char *msg_req = malloc(total_len);
 	if (msg_req == NULL) return ERR_RPC_OUT_OF_MEMORY;
+	memset(msg_req, 0, total_len);
 	
 	char *msg_offset = msg_req+sizeof(unsigned)+sizeof(int);
 	bytesRcvd = recv(sock, msg_offset, msg_len, 0);
@@ -382,7 +409,6 @@ int handle_request (int sock){
 		ERROR("returning ERR_RPC_PROC_EXEC_FAILED");
 		return ERR_RPC_PROC_EXEC_FAILED;
 	}
-	response_len = sizeof(unsigned)+sizeof(int)+msg_len;
 	*((unsigned *)msg_req) = msg_len;
 	*((int *)(msg_req+sizeof(unsigned))) = EXECUTE_SUCCESS;
 	msg_offset = msg_req+sizeof(unsigned)+sizeof(int)+(MAX_PROC_NAME_SIZE+1)*sizeof(char)
@@ -391,7 +417,7 @@ int handle_request (int sock){
 	marshall_args (sig.argLen, sig.argTypes, msg_offset, args);
 	
 	//send the success message
-	ret_code = send (sock, msg_req, response_len, 0);
+	ret_code = send (sock, msg_req, total_len, 0);
 	if (ret_code < 0){
 		ERROR("SENDING reply (EXECUTE_FAILURE) to the client failed!");
 		ret_code = ERR_RPC_SOCKET_FAILED;
@@ -715,20 +741,7 @@ int binder_reg_send_rcv(char *msg, unsigned total_len){
 	return ERR_RPC_SUCCESS;
 }
 
-static inline void marshall_binder_reg_msg (char* name, int argLen, int* argTypes){
-	
-}
-
-char *create_binder_reg_msg (char* name, int argLen, int* argTypes){
-	unsigned msg_len = sizeof(location) + (MAX_PROC_NAME_SIZE+1)*sizeof(char) + (1+argLen+1)*sizeof(int);
-	unsigned total_len = sizeof(unsigned) + sizeof(int) + msg_len;
-	char *msg = malloc(total_len);
-	if (msg == NULL){
-		ERROR("create_binder_reg_msg() is returning NULL...");
-		return NULL;
-	}
-	memset (msg, 0, total_len);
-	
+static inline void marshall_binder_reg_msg (char *msg, unsigned msg_len, char* name, int argLen, int* argTypes){
 	// marshall the registration details into the message
 	char *msg_offset = msg;
 	*((unsigned *) msg_offset) = msg_len;
@@ -747,6 +760,22 @@ char *create_binder_reg_msg (char* name, int argLen, int* argTypes){
 	
 	msg_offset += sizeof(unsigned);
 	memcpy(msg_offset, argTypes, (argLen+1)*sizeof(int));
+}
+
+char *create_binder_reg_msg (char* name, int argLen, int* argTypes){
+	unsigned msg_len = sizeof(location) + (MAX_PROC_NAME_SIZE+1)*sizeof(char) + (1+argLen+1)*sizeof(int);
+	unsigned total_len = sizeof(unsigned) + sizeof(int) + msg_len;
+	
+	// allocate a space for the message
+	char *msg = malloc(total_len);
+	if (msg == NULL){
+		ERROR("create_binder_reg_msg() is returning NULL...");
+		return NULL;
+	}
+	memset (msg, 0, total_len);
+	
+	// marshall the registration details into the message
+	marshall_binder_reg_msg (msg, msg_len, name, argLen, argTypes);
 	
 	// return dynamically allocated message
 	return msg;
@@ -820,8 +849,8 @@ int rpcRegister(char *name, int *argTypes, skeleton f) {
 
 
 
-int locate_server(char *msg, unsigned total_len, location *server_loc){
-	DEBUG("locate_server() is called...");
+int binder_loc_req(char *msg, unsigned total_len, location *server_loc){
+	DEBUG("binder_loc_req() is called...");
 	
 	if (send (binder_sock, msg, total_len, 0) < 0) {
 		ERROR("ERROR: Sending register msg to the binder failed!");
@@ -871,7 +900,7 @@ int locate_server(char *msg, unsigned total_len, location *server_loc){
 	}
 	
 	free(rcv_buff);
-	DEBUG("locate_server() is returning... ret_code=%d", ret_code);
+	DEBUG("binder_loc_req() is returning... ret_code=%d", ret_code);
 	return ret_code;
 }
 
@@ -953,36 +982,22 @@ int handle_server_response (void** args, char *msg_response){
 
 
 
-int rpcCall(char* name, int* argTypes, void** args) {
-	DEBUG("rpcCall() is called...");
-	// find arglen
-	unsigned arglen;
-	for (arglen = 0; argTypes[arglen] != 0; arglen++);
+unsigned total_exec_msg_len (int* argTypes){
+	// find argLen
+	unsigned argLen = arglen (argTypes);
 	
-	// create an array of size arglen to indicate each arg size
-	unsigned *arg_sizes = malloc(arglen*sizeof(unsigned));
-	if (arg_sizes == NULL){
-		ERROR("rpcCall() is returning. OUT_OF_MEMORY...");
-		return ERR_RPC_OUT_OF_MEMORY;
-	}
-	memset (arg_sizes, 0, arglen*sizeof(unsigned));
+	// find the location request length
+	unsigned loc_req_len = (MAX_PROC_NAME_SIZE+1)*sizeof(char) + (1+argLen+1)*sizeof(int);
 	
-	// analyze argTypes to find arg sizes
-	unsigned total_args_size = find_args_size (arglen, argTypes, arg_sizes);
+	// find total msg_len including the header and args
+	unsigned total_msg_len = sizeof(unsigned) + sizeof(int) + loc_req_len + find_args_total_size (argLen, argTypes);
 	
-	// prepare the location request
-	unsigned loc_req_len = (MAX_PROC_NAME_SIZE+1)*sizeof(char) + (1+arglen+1)*sizeof(int);
-	
-	// allocate additional space for args for later use
-	unsigned total_msg_len = sizeof(unsigned) + sizeof(int) + loc_req_len + total_args_size;
-	char *msg = malloc(total_msg_len);
-	if (msg == NULL) {
-		free(arg_sizes);
-		ERROR("rpcCall() is returning. OUT_OF_MEMORY...");
-		return ERR_RPC_OUT_OF_MEMORY;
-	}
-	memset (msg, 0, total_msg_len);
-	
+	return total_msg_len;
+}
+
+
+
+void marshall_loc_req_msg(char* name, unsigned argLen, int* argTypes, unsigned loc_req_len, char *msg){
 	char *msg_offset = msg;
 	*((unsigned *) msg_offset) = loc_req_len;
 	
@@ -993,91 +1008,204 @@ int rpcCall(char* name, int* argTypes, void** args) {
 	strncpy(msg_offset, name, MAX_PROC_NAME_SIZE);
 	
 	msg_offset += (MAX_PROC_NAME_SIZE+1)*sizeof(char);
-	*((unsigned *) msg_offset) = arglen;
+	*((unsigned *) msg_offset) = argLen;
 	
 	msg_offset += sizeof(unsigned);
-	memcpy(msg_offset, argTypes, (arglen+1)*sizeof(int));
+	memcpy(msg_offset, argTypes, (argLen+1)*sizeof(int));
+}
+
+
+
+int locate_server(char* name, int* argTypes, void** args, char *msg, location *server_loc) {
+	// find arglen
+	unsigned argLen = arglen (argTypes);
+	
+	// find the location request length
+	unsigned loc_req_len = (MAX_PROC_NAME_SIZE+1)*sizeof(char) + (1+argLen+1)*sizeof(int);
+	
+	marshall_loc_req_msg(name, argLen, argTypes, loc_req_len, msg);
+	
+	char *msg_offset = msg 	+ sizeof(unsigned) + sizeof(int) + (MAX_PROC_NAME_SIZE+1)*sizeof(char)
+							+ sizeof(unsigned) + (argLen+1)*sizeof(int);
+	// marshall args for later use (execution request)
+	marshall_args (argLen, argTypes, msg_offset, args);
 	
 	// send the location request to the binder to locate a server for procedure call
 	int ret;
 	ret = create_binder_sock();
 	if (ret != ERR_RPC_SUCCESS) {
-		free(arg_sizes);
-		free(msg);
-		ERROR("rpcCall() is returning. create_binder_sock() failed...");
+		ERROR("locate_server() is returning. create_binder_sock() failed...");
 		return ret;
 	}
-	location server_loc;
-	memset(&server_loc, 0, sizeof(location));
-	ret = locate_server(msg, sizeof(unsigned) + sizeof(int) + loc_req_len, &server_loc);
+	ret = binder_loc_req(msg, sizeof(unsigned) + sizeof(int) + loc_req_len, server_loc);
 	close(binder_sock);
 	
 	if (ret != ERR_RPC_SUCCESS) {
-		free(arg_sizes);
-		free(msg);
-		ERROR("rpcCall() is returning. locate_server() failed...");
+		ERROR("locate_server() is returning. binder_loc_req() failed...");
 		return ret;
 	}
-	// SUCCESSFULLY located the server. Prepare the execution request
-	msg_offset = msg;
-	*((unsigned *) msg_offset) = loc_req_len + total_args_size;
 	
-	msg_offset += sizeof(unsigned);
-	*((int *) msg_offset) = EXECUTE;
 	
-	msg_offset += sizeof(int) + (MAX_PROC_NAME_SIZE+1)*sizeof(char) + sizeof(unsigned) + (arglen+1)*sizeof(int);
-	for (unsigned i = 0; i < arglen; i++) {
-		memcpy(msg_offset, args[i], arg_sizes[i]);
-		msg_offset += arg_sizes[i];
-	}
-	
-	char *msg_response = malloc(total_msg_len);
-	if (msg_response == NULL) {
-		free(arg_sizes);
-		free(msg);
-		ERROR("rpcCall() is returning. OUT_OF_MEMORY...");
-		return ERR_RPC_OUT_OF_MEMORY;
-	}
-	memset (msg_response, 0, total_msg_len);
-	
-	DEBUG("msg_response memory- start:%p  end:%p  size:%d", msg_response, msg_response+total_msg_len, total_msg_len);
-	
+	return ERR_RPC_SUCCESS;
+}
+
+
+
+int proc_call_to_server (location *server_loc, char *msg, char *msg_response, unsigned total_msg_len){
 	// send the request to the server
 	int server_sock = 0;
-	ret = create_server_connection (&server_sock, &server_loc);
+	int ret = create_server_connection (&server_sock, server_loc);
 	if (ret != ERR_RPC_SUCCESS) {
-		free(arg_sizes);
-		free(msg);
-		free(msg_response);
-		ERROR("rpcCall() is returning. create_server_connection() failed...");
+		ERROR("proc_call_to_server() is returning. create_server_connection() failed...");
 		return ret;
 	}
 	
 	ret = send_to_server (&server_sock, msg, total_msg_len);
 	if (ret != ERR_RPC_SUCCESS) {
-		free(arg_sizes);
-		free(msg);
-		free(msg_response);
-		ERROR("rpcCall() is returning. send_to_server() failed...");
+		ERROR("proc_call_to_server() is returning. send_to_server() failed...");
 		return ret;
 	}
 	
 	ret = rcv_from_server (&server_sock, msg_response, total_msg_len);
 	if (ret != ERR_RPC_SUCCESS) {
-		free(arg_sizes);
+		ERROR("proc_call_to_server() is returning. rcv_from_server() failed...");
+		return ret;
+	}
+	
+	return ERR_RPC_SUCCESS;
+}
+
+
+
+int rpcCall(char* name, int* argTypes, void** args) {
+	DEBUG("rpcCall() is called...");
+	
+	location server_loc;
+	memset(&server_loc, 0, sizeof(location));
+	
+	// find the length of the message needed
+	unsigned total_msg_len = total_exec_msg_len(argTypes);
+	
+	// allocate space for request 'execute' and response (location request is a submsg of execute)
+	char *msg			= malloc(total_msg_len);
+	char *msg_response 	= malloc(total_msg_len);
+	if (msg == NULL || msg_response == NULL) {
+		if (msg) free(msg);
+		if (msg_response) free(msg_response);
+		ERROR("rpcCall() is returning. OUT_OF_MEMORY...");
+		return ERR_RPC_OUT_OF_MEMORY;
+	}
+	memset (msg, 0, total_msg_len);
+	memset (msg_response, 0, total_msg_len);
+	
+	// find the server location for execution request
+	int ret = locate_server(name, argTypes, args, msg, &server_loc);
+	if(ret != ERR_RPC_SUCCESS){
 		free(msg);
 		free(msg_response);
-		ERROR("rpcCall() is returning. rcv_from_server() failed...");
+		ERROR("rpcCall() is returning. locate_server() failed...");
+		return ret;
+	}
+	
+	// SUCCESSFULLY located the server. Prepare the execution request for later use (modify type and length of the msg)
+	char * msg_offset = msg;
+	*((unsigned *) msg_offset) = total_msg_len - (sizeof(unsigned) + sizeof(int));
+	
+	msg_offset += sizeof(unsigned);
+	*((int *) msg_offset) = EXECUTE;
+	
+	// connect and make a execute request from the server
+	ret = proc_call_to_server(&server_loc, msg, msg_response, total_msg_len);
+	if(ret != ERR_RPC_SUCCESS){
+		free(msg);
+		free(msg_response);
+		ERROR("rpcCall() is returning. proc_call_to_server() failed...");
 		return ret;
 	}
 	
 	// handle the response received
 	ret = handle_server_response (args, msg_response);
+	if(ret != ERR_RPC_SUCCESS){
+		free(msg);
+		free(msg_response);
+		ERROR("rpcCall() is returning. handle_server_response() failed...");
+		return ret;
+	}
 	
-	free(arg_sizes);
 	free(msg);
 	free(msg_response);
 	
 	DEBUG("rpcCall() is returning...ret=%d", ret);
+	return ret;
+}
+
+
+int rpcCacheCall(char* name, int* argTypes, void** args){
+	DEBUG("rpcCacheCall() is called...");
+	
+	static int initialized = 0;
+	if (!initialized){
+		// initialize
+		memset(&loc_cache, 0, sizeof(struct locations));
+		initialized = 1;
+	}
+	
+	
+	location server_loc;
+	memset(&server_loc, 0, sizeof(location));
+	
+	// find the length of the message needed
+	unsigned total_msg_len = total_exec_msg_len(argTypes);
+	
+	// allocate space for request 'execute' and response (location request is a submsg of execute)
+	char *msg			= malloc(total_msg_len);
+	char *msg_response 	= malloc(total_msg_len);
+	if (msg == NULL || msg_response == NULL) {
+		if (msg) free(msg);
+		if (msg_response) free(msg_response);
+		ERROR("rpcCacheCall() is returning. OUT_OF_MEMORY...");
+		return ERR_RPC_OUT_OF_MEMORY;
+	}
+	memset (msg, 0, total_msg_len);
+	memset (msg_response, 0, total_msg_len);
+	
+	// find the server location for execution request
+	int ret = locate_server(name, argTypes, args, msg, &server_loc);
+	if(ret != ERR_RPC_SUCCESS){
+		free(msg);
+		free(msg_response);
+		ERROR("rpcCacheCall() is returning. locate_server() failed...");
+		return ret;
+	}
+	
+	// SUCCESSFULLY located the server. Prepare the execution request for later use (modify type and length of the msg)
+	char * msg_offset = msg;
+	*((unsigned *) msg_offset) = total_msg_len - (sizeof(unsigned) + sizeof(int));
+	
+	msg_offset += sizeof(unsigned);
+	*((int *) msg_offset) = EXECUTE;
+	
+	// connect and make a execute request from the server
+	ret = proc_call_to_server(&server_loc, msg, msg_response, total_msg_len);
+	if(ret != ERR_RPC_SUCCESS){
+		free(msg);
+		free(msg_response);
+		ERROR("rpcCacheCall() is returning. proc_call_to_server() failed...");
+		return ret;
+	}
+	
+	// handle the response received
+	ret = handle_server_response (args, msg_response);
+	if(ret != ERR_RPC_SUCCESS){
+		free(msg);
+		free(msg_response);
+		ERROR("rpcCacheCall() is returning. handle_server_response() failed...");
+		return ret;
+	}
+	
+	free(msg);
+	free(msg_response);
+	
+	DEBUG("rpcCacheCall() is returning...ret=%d", ret);
 	return ret;
 }
