@@ -27,6 +27,8 @@
 #define		ERR_RPC_BINDER_SOCK_FAILED		-18
 #define		ERR_RPC_SERVER_SOCK_FAILED		-19
 
+#define 	ERR_BINDER_TERMINATE_SIG		-50
+
 #define		ERR_RPC_INCOMPLETE_MSG			-99
 #define		ERR_RPC_ARR_LEN_NOT_ENOUGH		-100
 
@@ -47,9 +49,6 @@ typedef enum {
 } msg_type;
 
 
-typedef enum {
-	SUCCESS = 0
-} err_code;
 
 
 

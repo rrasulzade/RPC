@@ -82,7 +82,7 @@ int main(int argc, char *argv[]) {
   rpcInit();
 
   f0_register();
-
+  f0_register();
   
   /* call rpcExecute */
   rpcExecute();

@@ -7,8 +7,6 @@
 
 #include "defs.h"
 
-#define 	TERMINATE_ALL		-500
-
 
 
 struct failure : public std::exception {

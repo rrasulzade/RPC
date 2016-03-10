@@ -78,14 +78,14 @@ bool operator==(const ProcLocation& lhs, const ProcLocation& rhs){
 ///////////////////////////////////////// Helper Functions  /////////////////////////////////////////////////
 
 // loop until requires amount of data is not received
-int recvMsg(int sockFD, char buff[], unsigned int msg_len){
+int recvMsg(int sockFD, char data[], unsigned int msg_len){
 	if (msg_len <= 0) {
 		return 0;
 	}
 
 	unsigned int bytesRemain = msg_len;
 	int received = 0;
-	char *msg = buff;
+	char *msg = data;
 
 	while (bytesRemain > 0) {
 		received = recv(sockFD, msg, bytesRemain, 0);
@@ -140,9 +140,11 @@ int sendResult(int sockFD, int type, void* data){
 
 ///////////////////////////////////  Binder  ////////////////////////////////////////////
 
-
+// Binder constructor
 Binder::Binder(void){}
 
+
+// Binder detructor
 Binder::~Binder(void){
 	__INFO("");
 
@@ -152,8 +154,6 @@ Binder::~Binder(void){
     }
 
 }
-
-
 
 
 // handle requests from Server and Client
@@ -522,57 +522,6 @@ void Binder::removeServer(int socketFD){
 
 
 
-// send LOC_SUCCESS to client with the server location
-// int Binder::sendLOC_SUCC(int sockFD, location loc){
-// 	__INFO("");
-
-// 	int type = LOC_SUCCESS;
-//     unsigned int msg_len = sizeof(location);	
-//     unsigned int total_len = sizeof(unsigned int) + sizeof(type) + msg_len;
-
-// 	char msg[total_len+1];
-	
-// 	memset(msg, 0, total_len);	
-
-// 	memcpy(msg, &msg_len, sizeof(msg_len));
-// 	memcpy(msg+sizeof(msg_len), &type, sizeof(type));
-// 	memcpy(msg+sizeof(msg_len)+sizeof(type), &loc, sizeof(location));
-// 	msg[total_len] = '\0';
-
-// 	printf("send LOC_SUCCESS - msg_size:%u total_len:%u \n", msg_len, total_len);
-
-// 	int status = send(sockFD, msg, total_len, 0);
-
-//     return status;
-// }
-
-
-// send LOC_FAILURE, REGISTER_FAILURE, REGISTER_SUCCESS, TERMINATE and UNKNOWN
-// message types with return code
-// int Binder::sendResult(int sockFD, int type, int retCode){
-// 	__INFO("");
-
-// 	unsigned int msg_len = sizeof(retCode);
-// 	unsigned int total_len = sizeof(unsigned int) + sizeof(type) + msg_len;
-
-// 	char msg[total_len+1];
-
-// 	memset(msg, 0, total_len);	
-
-// 	memcpy(msg, &msg_len, sizeof(msg_len));
-// 	memcpy(msg+sizeof(msg_len), &type, sizeof(type));
-// 	memcpy(msg+sizeof(msg_len)+sizeof(type), &retCode, sizeof(retCode));
-// 	msg[total_len] = '\0';
-
-// 	printf("sendResult - msg_size:%u total_len:%u\n", msg_len, total_len);
-
-// 	int status = send(sockFD, msg, total_len, 0);
-
-// 	return status;
-// }
-
-
-
 // create socket, then bind binder_addr to socket
 // then listen for socket connections
 void Binder::setup_socket(){
@@ -683,7 +632,7 @@ void Binder::start(){
                     status = handle_message(connections[i]);
 
                     // TERMINATE msg is received 
-                    if (status == TERMINATE_ALL){
+                    if (status == ERR_BINDER_TERMINATE_SIG){
                     	cout << "Terminate all servers are done " << endl;
                     	stop = true;
                     	break;
