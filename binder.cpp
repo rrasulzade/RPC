@@ -202,6 +202,8 @@ int Binder::handle_message(int sockFD){
    		case LOC_REQUEST:
    			proc_location_request(sockFD, msg);
    			break;
+   		case LOC_REQUEST_CACHE:
+   				
    		case TERMINATE:
    			status = terminateServers();							 
    			break;
@@ -612,7 +614,6 @@ void Binder::start(){
         while(i < connections.size()){
             // there is an incoming connection
             if(FD_ISSET(connections[i], &readfds)){
-
                 if(connections[i] == binder_sockFD){
                     // connect to client, accept the data
                     connected_sockFD = accept(binder_sockFD, (sockaddr*)&connected_sockaddr, (socklen_t *)&len);
@@ -681,7 +682,6 @@ void Binder::printMap(){
 
 
 void Binder::printList(){
-
   list<ProcLocation>::iterator list_it = server_queue.begin();
   for(;list_it != server_queue.end(); list_it++){
     cout << "   "

@@ -45,6 +45,7 @@ typedef enum {
 	EXECUTE_SUCCESS,
 	EXECUTE_FAILURE,
 	TERMINATE,
+	LOC_REQUEST_CACHE,
 	UNKNOWN
 } msg_type;
 
