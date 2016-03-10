@@ -122,6 +122,42 @@ void f2_call (){
   free(args2);
 }
 
+
+void f2a_call (){
+  /* prepare the arguments for f2 */
+  float a2 = 3.14159;
+  double b2 = 1234.1001;
+  int count2 = 3;
+  char *return2 = (char *)malloc(50 * sizeof(char));
+  int argTypes2[count2 + 1];
+  void **args2;
+
+  argTypes2[0] = (1 << ARG_OUTPUT) | (ARG_CHAR << 16) | 50;
+  argTypes2[1] = (1 << ARG_INPUT) | (ARG_FLOAT << 16);
+  argTypes2[2] = (1 << ARG_INPUT) | (ARG_DOUBLE << 16);
+  argTypes2[3] = 0;
+
+  args2 = (void **)malloc(count2 * sizeof(void *));
+  args2[0] = (void *)return2;
+  args2[1] = (void *)&a2;
+  args2[2] = (void *)&b2;
+  
+  
+  int s2 = rpcCall("f2", argTypes2, args2);
+  /* test the return of f2 */
+  printf("\nEXPECTED return of f2 is: 31234\n");
+  if (s2 >= 0) {
+    printf("ACTUAL return of f2 is: %s\n", (char *)args2[0]);
+  }
+  else {
+    printf("Error: %d\n", s2);
+  }
+  
+  
+  free(return2);
+  free(args2);
+}
+
 void f3_call (){
   /* prepare the arguments for f3 */
   long a3[11] = {11, 109, 107, 105, 103, 101, 102, 104, 106, 108, 110};
@@ -157,6 +193,44 @@ void f3_call (){
    
   free(args3);
 }
+
+
+void f3a_call (){
+  /* prepare the arguments for f3 */
+  long a3[11] = {11, 109, 107, 105, 103, 101}; // 102, 104, 106, 108, 110};
+  int count3 = 1;
+  int argTypes3[count3 + 1];
+  void **args3;
+
+  argTypes3[0] = (1 << ARG_OUTPUT) | (1 << ARG_INPUT) | (ARG_LONG << 16) | 6;
+  argTypes3[1] = 0;
+
+  args3 = (void **)malloc(count3 * sizeof(void *));
+  args3[0] = (void *)a3;
+  
+  
+  int s3 = rpcCall("f3", argTypes3, args3);
+  /* test the return of f3 */
+  printf(
+    "\nEXPECTED return of f3 is: 109 107 105 103 101 11\n"
+  );
+
+  if (s3 >= 0) {
+    printf("ACTUAL return of f3 is: ");
+    int i;
+    for (i = 0; i < 6; i++) {
+      printf(" %ld", *(((long *)args3[0]) + i));
+    }
+    printf("\n");
+  }
+  else {
+    printf("Error: %d\n", s3);
+  }
+  
+   
+  free(args3);
+}
+
 
 void f4_call (){
   /* prepare the arguemtns for f4 */
@@ -194,6 +268,7 @@ int main() {
   f1_call ();
   f2_call ();
   f3_call ();
+  f3a_call();
   f4_call ();
 
 

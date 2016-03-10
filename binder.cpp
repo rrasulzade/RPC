@@ -325,7 +325,6 @@ void Binder::proc_registration(int sockFD, char * message){
 	    }
 
 	    int code = ERR_RPC_SUCCESS;
-        // sendResult(sockFD, REGISTER_SUCCESS, NULL, &code);
         sendResult(sockFD, REGISTER_SUCCESS, &code);
 
 	}catch(failure& e){

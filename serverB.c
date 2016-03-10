@@ -46,6 +46,22 @@ void f2_register(){
   rpcRegister("f2", argTypes2, *f2_Skel);
 }
 
+void f2a_register(){
+  int count2 = 3;
+  int argTypes2[count2 + 1];
+
+  /* 
+   * the length in argTypes2[0] doesn't have to be 100,
+   * the server doesn't know the actual length of this argument
+   */
+  argTypes2[0] = (1 << ARG_OUTPUT) | (ARG_CHAR << 16) | 70;
+  argTypes2[1] = (1 << ARG_INPUT) | (ARG_FLOAT << 16);
+  argTypes2[2] = (1 << ARG_INPUT) | (ARG_DOUBLE << 16);
+  argTypes2[3] = 0;
+
+  rpcRegister("f2", argTypes2, *f2_Skel);
+}
+
 
 void f3_register(){
   int count3 = 1;
@@ -76,6 +92,8 @@ void f4_register(){
 
 
 
+
+
 int main(int argc, char *argv[]) {
   
   /* create sockets and connect to the binder */
@@ -83,6 +101,7 @@ int main(int argc, char *argv[]) {
 
   f1_register();
   f4_register();
+  f2a_register();
   
   /* call rpcExecute */
   rpcExecute();
