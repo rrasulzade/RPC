@@ -135,6 +135,24 @@ int sendResult(int sockFD, int type, void* data){
 }
 
 
+// send LOC_SUCCESS with the list of servers to the client
+int sendCache(int sockFD, int type, list<ProcLocation> loc_set){
+	unsigned int msg_len = loc_set.size()*sizeof(loc_set); 
+	unsigned int total_len = sizeof(msg_len) + sizeof(type) + msg_len;
+	int status = 0;
+	char msg[total_len+1];
+	memset(msg, 0, total_len);
+
+	memcpy(msg, &msg_len, sizeof(msg_len));
+	memcpy(msg+sizeof(msg_len), &type, sizeof(type));
+	memcpy(msg+sizeof(msg_len)+sizeof(type), &loc_set, msg_len);
+
+	msg[total_len] = '\0';
+	status = send(sockFD, msg, total_len, 0);
+
+	return status;
+}
+
 
 ///////////////////////////////////  Binder  ////////////////////////////////////////////
 
@@ -250,35 +268,27 @@ void Binder::proc_cache_request(int sockFD, char * message){
 	memcpy(proc.procInfo.argTypes, message, (argLen+1)*sizeof(int));
 
 	// change array length to 1 to indicate that this parameter is an array
-	for(unsigned int i = 0; i < proc.procInfo.argLen; i++){
-		if((proc.procInfo.argTypes[i] & 0x0000ffff) > 0)
+	for(unsigned int i = 0; i < proc.procInfo.argLen && (proc.procInfo.argTypes[i] & 0x0000ffff) > 0; i++){
+		// if((proc.procInfo.argTypes[i] & 0x0000ffff) > 0)
 			proc.procInfo.argTypes[i] = (proc.procInfo.argTypes[i] & 0xffff0000) + 0x00000001;
 	}
 
 	map<ProcSignature, list<ProcLocation> >::iterator map_it;
     map_it = sig_to_location.find(proc);
 
+    delete [] proc.procInfo.argTypes;  
 
     try{
     	if(map_it != sig_to_location.end() && map_it->second.size() > 0){
-
-
-
-           delete [] proc.procInfo.argTypes;     
-
+    		sendCache(sockFD, LOC_SUCCESS, map_it->second); 
     	}else{
     		throw failure();
     	}
     }catch(failure& e){
     	cerr << "LOC_FAILURE: ERR_RPC_NO_SERVER_AVAIL" << endl; 
-    	cout << proc.procInfo.proc_name <<  " Arglen: " <<  proc.procInfo.argLen <<" -> " << endl;
-    	
     	int code = ERR_RPC_NO_SERVER_AVAIL;
 	    sendResult(sockFD, LOC_FAILURE, &code);
-	    delete [] proc.procInfo.argTypes;
     }
-
-
 }
 
 
@@ -314,8 +324,8 @@ void Binder::proc_location_request(int sockFD, char* message){
 	memcpy(proc.procInfo.argTypes, message, (argLen+1)*sizeof(int));
 
 	// change array length to 1 to indicate that this parameter is an array
-	for(unsigned int i = 0; i < proc.procInfo.argLen; i++){
-		if((proc.procInfo.argTypes[i] & 0x0000ffff) > 0)
+	for(unsigned int i = 0; i < proc.procInfo.argLen && (proc.procInfo.argTypes[i] & 0x0000ffff) > 0; i++){
+		// if((proc.procInfo.argTypes[i] & 0x0000ffff) > 0)
 			proc.procInfo.argTypes[i] = (proc.procInfo.argTypes[i] & 0xffff0000) + 0x00000001;
 	}
 
@@ -395,8 +405,7 @@ void Binder::proc_registration(int sockFD, char * message){
 	try{
 		proc.procInfo.argTypes = new int[argLen+1];
 	}catch(bad_alloc& e){
-		cout << "new failed: ERR_BINDER_OUT_OF_MEMORY" << endl; 
-
+		cerr << "new failed: ERR_BINDER_OUT_OF_MEMORY" << endl; 
     	int code = ERR_BINDER_OUT_OF_MEMORY;
 	    sendResult(sockFD, REGISTER_FAILURE, &code);
 	    return;
@@ -409,8 +418,8 @@ void Binder::proc_registration(int sockFD, char * message){
 	// if any of the argTypes contains array length, change that length to 1
 	// to indicate that this argType requires array
 	// otherwise, length is 0 for scalar paramaters 
-	for(unsigned int i = 0; i < proc.procInfo.argLen; i++){
-		if((proc.procInfo.argTypes[i] & 0x0000ffff) > 0)
+	for(unsigned int i = 0; i < proc.procInfo.argLen &&  (proc.procInfo.argTypes[i] & 0x0000ffff) > 0; i++){
+		// if((proc.procInfo.argTypes[i] & 0x0000ffff) > 0)
 			proc.procInfo.argTypes[i] = (proc.procInfo.argTypes[i] & 0xffff0000) + 0x00000001;
 	}
 
@@ -457,9 +466,8 @@ void Binder::proc_registration(int sockFD, char * message){
         sendResult(sockFD, REGISTER_SUCCESS, &code);
 
 	}catch(failure& e){
-		cout << "send FAILURE  <msg_type + msg_size + ERR_RPC_PROC_RE_REG >" << endl;
+		 cout << "send FAILURE  <msg_type + msg_size + ERR_RPC_PROC_RE_REG >" << endl;
 		 int code = ERR_RPC_PROC_RE_REG;
-        // sendResult(sockFD, REGISTER_FAILURE, NULL, &code);
 		 sendResult(sockFD, REGISTER_FAILURE, &code);
 	}
 }
@@ -504,18 +512,14 @@ int Binder::terminateServers(){
 	int type = TERMINATE;
 	vector<int>::iterator v_it = server_sockets.begin();
 
-	printList();
-
 	for(; v_it != server_sockets.end(); v_it++){
 		int code = ERR_RPC_SUCCESS;
-		// int status = sendResult(*v_it, type, NULL, &code);
 		int status = sendResult(*v_it, type, &code);
-		
-		cout << "TERMINATE sent to " << *v_it << endl;
-
 		if(status < 0){
-			cerr << "ERROR: on terminating servers"<< endl; 			
+			cerr << "ERROR: on terminating servers"<< endl; 
+			return status;			
 		}
+		cout << "TERMINATE sent to " << *v_it << endl;
 	}
 	return ERR_BINDER_TERMINATE_SIG;
 }
@@ -681,7 +685,7 @@ void Binder::start(){
 
                     // TERMINATE msg is received 
                     if (status == ERR_BINDER_TERMINATE_SIG){
-                    	cout << "Terminate all servers are done " << endl;
+                    	cerr << "Terminate binder " << endl;
                     	stop = true;
                     	break;
                     }
