@@ -44,14 +44,8 @@ class Binder{
   	void start();
   	void setup_socket();
   	int handle_message(int sockFD);
-    // int sendLOC_SUCC(int sockFD, location loc);
-    // int sendResult(int sockFD, int type, int retCode);
-
-    // int sendResult(int sockFD, int type, void* data);
-
     void proc_registration(int sockFD, char * message);
-    void proc_location_request(int sockFD, char * message);
-    void proc_cache_request(int sockFD, char * message);
+    void proc_location_request(int sockFD, char * message, bool cache);
   	ProcLocation roundRobinServer(std::list<ProcLocation>& loc_set);
   	void addToServerQueue(std::list<ProcLocation>& loc_set);
   	void addToServerQueue(ProcLocation& loc);

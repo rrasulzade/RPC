@@ -178,6 +178,7 @@ int Binder::handle_message(int sockFD){
     unsigned int msg_len = 0;
     int msgType;
     int status;
+    bool cache = false;
     char *msg;
      
     // receive message len
@@ -215,12 +216,11 @@ int Binder::handle_message(int sockFD){
    			proc_registration(sockFD, msg);
    			printMap();
    			break;
-   		case LOC_REQUEST:
-   			proc_location_request(sockFD, msg);
-   			break;
    		case LOC_REQUEST_CACHE:
-   			proc_cache_request(sockFD, msg);
-   			break;	
+   			cache = true;	
+   		case LOC_REQUEST:
+   			proc_location_request(sockFD, msg, cache);
+   			break;
    		case TERMINATE:
    			status = terminateServers();							 
    			break;
@@ -233,143 +233,6 @@ int Binder::handle_message(int sockFD){
 
     delete [] msg;
     return status;
-}
-
-
-
-void Binder::proc_cache_request(int sockFD, char * message){
-	__INFO("");
-
-	ProcSignature proc;
-	memset(&proc, 0, sizeof(ProcSignature));
-
-	// copy procedure name from message
-	strncpy(proc.procInfo.proc_name, message, MAX_PROC_NAME_SIZE);
-	proc.procInfo.proc_name[MAX_PROC_NAME_SIZE] = '\0';
-
-	message += (MAX_PROC_NAME_SIZE+1)*sizeof(char);
-
-	// find length of argTypes
-    int argLen = *(int*) message; 
-    proc.procInfo.argLen = argLen;
-
-    // handle memory allocation error 
-    try{
-		proc.procInfo.argTypes = new int[argLen+1];
-	}catch(bad_alloc& e){
-		cerr << "New failed: ERR_BINDER_OUT_OF_MEMORY" << endl; 
-    	int code = ERR_BINDER_OUT_OF_MEMORY;
-	    sendResult(sockFD, LOC_FAILURE, &code);
-	    return;
-	}
-
-	// read argTypes
-	message += sizeof(int);
-	memcpy(proc.procInfo.argTypes, message, (argLen+1)*sizeof(int));
-
-	// change array length to 1 to indicate that this parameter is an array
-	for(unsigned int i = 0; i < proc.procInfo.argLen && (proc.procInfo.argTypes[i] & 0x0000ffff) > 0; i++){
-		// if((proc.procInfo.argTypes[i] & 0x0000ffff) > 0)
-			proc.procInfo.argTypes[i] = (proc.procInfo.argTypes[i] & 0xffff0000) + 0x00000001;
-	}
-
-	map<ProcSignature, list<ProcLocation> >::iterator map_it;
-    map_it = sig_to_location.find(proc);
-
-    delete [] proc.procInfo.argTypes;  
-
-    try{
-    	if(map_it != sig_to_location.end() && map_it->second.size() > 0){
-    		sendCache(sockFD, LOC_SUCCESS, map_it->second); 
-    	}else{
-    		throw failure();
-    	}
-    }catch(failure& e){
-    	cerr << "LOC_FAILURE: ERR_RPC_NO_SERVER_AVAIL" << endl; 
-    	int code = ERR_RPC_NO_SERVER_AVAIL;
-	    sendResult(sockFD, LOC_FAILURE, &code);
-    }
-}
-
-
-// handle requests from client that needs the server location
-void Binder::proc_location_request(int sockFD, char* message){
-	__INFO("");
-
-	ProcSignature proc;
-	memset(&proc, 0, sizeof(ProcSignature));
-
-	// copy procedure name from message
-	strncpy(proc.procInfo.proc_name, message, MAX_PROC_NAME_SIZE);
-	proc.procInfo.proc_name[MAX_PROC_NAME_SIZE] = '\0';
-
-	message += (MAX_PROC_NAME_SIZE+1)*sizeof(char);
-
-	// find length of argTypes
-    int argLen = *(int*) message; 
-    proc.procInfo.argLen = argLen;
-
-    // handle memory allocation error 
-    try{
-		proc.procInfo.argTypes = new int[argLen+1];
-	}catch(bad_alloc& e){
-		cerr << "New failed: ERR_BINDER_OUT_OF_MEMORY" << endl; 
-    	int code = ERR_BINDER_OUT_OF_MEMORY;
-	    sendResult(sockFD, LOC_FAILURE, &code);
-	    return;
-	}
-
-	// read argTypes
-	message += sizeof(int);
-	memcpy(proc.procInfo.argTypes, message, (argLen+1)*sizeof(int));
-
-	// change array length to 1 to indicate that this parameter is an array
-	for(unsigned int i = 0; i < proc.procInfo.argLen && (proc.procInfo.argTypes[i] & 0x0000ffff) > 0; i++){
-		// if((proc.procInfo.argTypes[i] & 0x0000ffff) > 0)
-			proc.procInfo.argTypes[i] = (proc.procInfo.argTypes[i] & 0xffff0000) + 0x00000001;
-	}
-
-	map<ProcSignature, list<ProcLocation> >::iterator map_it;
-    map_it = sig_to_location.find(proc);
-
-    // no need to this procedure after find is called
-    delete [] proc.procInfo.argTypes; 
-
-    try{
-    	if(map_it != sig_to_location.end() && map_it->second.size() > 0){
-    		ProcLocation server_location = roundRobinServer(map_it->second);
-            sendResult(sockFD, LOC_SUCCESS, &(server_location.locationInfo)); 
-    	}else{
-    		throw failure();
-    	}
-    }catch(failure& e){
-    	cerr << "LOC_FAILURE: ERR_RPC_NO_SERVER_AVAIL" << endl; 
-    	int code = ERR_RPC_NO_SERVER_AVAIL;
-	    sendResult(sockFD, LOC_FAILURE, &code);
-    }
-
-
-}
-
-
-// simplified Round Robin algorithm to choose the next available server
-ProcLocation Binder::roundRobinServer(list<ProcLocation>& loc_set){
-	if (loc_set.size() == 1){
-		return *(loc_set.begin());
-	}
-
-	list<ProcLocation>::iterator set_it;
-	list<ProcLocation>::iterator list_it = server_queue.begin();
-	for(;list_it != server_queue.end(); list_it++){
-		set_it = find(loc_set.begin(), loc_set.end(), *list_it);
-		if(set_it != loc_set.end()){
-			list_it = server_queue.erase(list_it);
-			server_queue.push_back(*set_it);
-			break;
-		}
-	}
-
-	return *set_it;
 }
 
 
@@ -471,6 +334,93 @@ void Binder::proc_registration(int sockFD, char * message){
 		 sendResult(sockFD, REGISTER_FAILURE, &code);
 	}
 }
+
+
+
+// handle requests from client that needs the server location
+void Binder::proc_location_request(int sockFD, char* message, bool cache){
+	__INFO("");
+
+	ProcSignature proc;
+	memset(&proc, 0, sizeof(ProcSignature));
+
+	// copy procedure name from message
+	strncpy(proc.procInfo.proc_name, message, MAX_PROC_NAME_SIZE);
+	proc.procInfo.proc_name[MAX_PROC_NAME_SIZE] = '\0';
+
+	message += (MAX_PROC_NAME_SIZE+1)*sizeof(char);
+
+	// find length of argTypes
+    int argLen = *(int*) message; 
+    proc.procInfo.argLen = argLen;
+
+    // handle memory allocation error 
+    try{
+		proc.procInfo.argTypes = new int[argLen+1];
+	}catch(bad_alloc& e){
+		cerr << "New failed: ERR_BINDER_OUT_OF_MEMORY" << endl; 
+    	int code = ERR_BINDER_OUT_OF_MEMORY;
+	    sendResult(sockFD, LOC_FAILURE, &code);
+	    return;
+	}
+
+	// read argTypes
+	message += sizeof(int);
+	memcpy(proc.procInfo.argTypes, message, (argLen+1)*sizeof(int));
+
+	// change array length to 1 to indicate that this parameter is an array
+	for(unsigned int i = 0; i < proc.procInfo.argLen && (proc.procInfo.argTypes[i] & 0x0000ffff) > 0; i++){
+		// if((proc.procInfo.argTypes[i] & 0x0000ffff) > 0)
+			proc.procInfo.argTypes[i] = (proc.procInfo.argTypes[i] & 0xffff0000) + 0x00000001;
+	}
+
+	map<ProcSignature, list<ProcLocation> >::iterator map_it;
+    map_it = sig_to_location.find(proc);
+
+    // no need to this procedure after find is called
+    delete [] proc.procInfo.argTypes; 
+
+    try{
+    	if(map_it != sig_to_location.end() && map_it->second.size() > 0){
+    		if(cache){
+    			sendCache(sockFD, LOC_SUCCESS, map_it->second); 
+    		}else{
+	    		ProcLocation server_location = roundRobinServer(map_it->second);
+    	        sendResult(sockFD, LOC_SUCCESS, &(server_location.locationInfo)); 
+    	    }
+    	}else{
+    		throw failure();
+    	}
+    }catch(failure& e){
+    	cerr << "LOC_FAILURE: ERR_RPC_NO_SERVER_AVAIL" << endl; 
+    	int code = ERR_RPC_NO_SERVER_AVAIL;
+	    sendResult(sockFD, LOC_FAILURE, &code);
+    }
+
+
+}
+
+
+// simplified Round Robin algorithm to choose the next available server
+ProcLocation Binder::roundRobinServer(list<ProcLocation>& loc_set){
+	if (loc_set.size() == 1){
+		return *(loc_set.begin());
+	}
+
+	list<ProcLocation>::iterator set_it;
+	list<ProcLocation>::iterator list_it = server_queue.begin();
+	for(;list_it != server_queue.end(); list_it++){
+		set_it = find(loc_set.begin(), loc_set.end(), *list_it);
+		if(set_it != loc_set.end()){
+			list_it = server_queue.erase(list_it);
+			server_queue.push_back(*set_it);
+			break;
+		}
+	}
+
+	return *set_it;
+}
+
 
 
 // adds the given server location to the server queue, if they are
