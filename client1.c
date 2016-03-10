@@ -197,7 +197,7 @@ void f3_call (){
 
 void f3a_call (){
   /* prepare the arguments for f3 */
-  long a3[11] = {11, 109, 107, 105, 103, 101}; // 102, 104, 106, 108, 110};
+  long a3[11] = {11, 107, 103, 105, 109, 101}; // 102, 104, 106, 108, 110};
   int count3 = 1;
   int argTypes3[count3 + 1];
   void **args3;
