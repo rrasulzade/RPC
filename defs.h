@@ -11,10 +11,9 @@
 #define		ERR_RPC_PROC_EXEC_FAILED		-2
 #define		ERR_RPC_EXEC_BEFORE_REG			-3
 #define		ERR_RPC_UNREGISTERED_PROC		-4
-#define		ERR_RPC_NO_SERVER_AVAIL			-5
+// #define		ERR_RPC_NO_SERVER_AVAIL			-5
 #define		ERR_RPC_UNEXPECTED_MSG_TYPE		-6
-// #define		ERR_RPC_BINDER_NOT_FOUND		-7
-#define		ERR_RPC_UNKNOWN_TERMINATION_SRC	-8
+// #define		ERR_RPC_UNKNOWN_TERMINATION_SRC	-8
 #define		ERR_RPC_SOCKS_INACTIVE			-9			// both listening and binder sock inactive in server
 #define		ERR_RPC_SOCKET_FAILED			-10
 #define		ERR_RPC_ENV_ADDR_NULL			-11
@@ -31,7 +30,7 @@
 #define 	ERR_BINDER_TERMINATE_SIG		-50
 
 #define		ERR_RPC_INCOMPLETE_MSG			-99
-#define		ERR_RPC_ARR_LEN_NOT_ENOUGH		-100
+// #define		ERR_RPC_ARR_LEN_NOT_ENOUGH		-100
 
 
 

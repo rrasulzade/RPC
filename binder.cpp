@@ -24,7 +24,7 @@ using namespace std;
 
 //////////////////////////////////  ProcSignature  ///////////////////////////////////////////////
 
-
+// equality operator overloading for ProcSignature
 bool operator==(const ProcSignature& lhs, const ProcSignature& rhs) {
 	int str_compare = strcmp(lhs.procInfo.proc_name, rhs.procInfo.proc_name);
 
@@ -42,6 +42,7 @@ bool operator==(const ProcSignature& lhs, const ProcSignature& rhs) {
 }
 
 
+// comparison operator overloading for ProcSignature
 bool operator< (const ProcSignature& lhs, const ProcSignature& rhs){
 	int str_compare = strcmp(lhs.procInfo.proc_name, rhs.procInfo.proc_name);
 	
@@ -63,6 +64,7 @@ bool operator< (const ProcSignature& lhs, const ProcSignature& rhs){
 ///////////////////////////////// ProcLocation  ///////////////////////////////////////
 
 
+// equality operator overloading for ProcLocation
 bool operator==(const ProcLocation& lhs, const ProcLocation& rhs){
 	if(lhs.locationInfo.s_port != rhs.locationInfo.s_port || 
 		memcmp(lhs.locationInfo.s_id.addr.hostname, rhs.locationInfo.s_id.addr.hostname, MAX_HOSTNAME_SIZE) != 0){
@@ -70,7 +72,6 @@ bool operator==(const ProcLocation& lhs, const ProcLocation& rhs){
 	}
 	return true;
 }
-
 
 
 ///////////////////////////////////////// Helper Functions  /////////////////////////////////////////////////
@@ -208,6 +209,7 @@ int Binder::handle_message(int sockFD){
    	msg[msg_len] = '\0';  
 
 
+   	// determine the message type
    	switch(msgType){
    		case REGISTER:
    			proc_registration(sockFD, msg);
@@ -296,6 +298,11 @@ void Binder::proc_registration(int sockFD, char * message){
 
 	    	if(set_it == map_it->second.end()){
 	    		map_it->second.push_back(loc);
+
+	    		// if the number of servers in the list is more than 2, 
+	    		// add this location to the end of the list
+	    		// if the number of servers in the list is equal to 2,
+	    		// add this and previous servers to the end of the list
 	    		if(map_it->second.size() > 2)
 	    			addToServerQueue(loc);
 	    		else if(map_it->second.size() == 2)	
@@ -316,10 +323,12 @@ void Binder::proc_registration(int sockFD, char * message){
 		    server_sockets.push_back(sockFD);
 	    }
 
+	    // send REGISTER_SUCCESS 
 	    int code = ERR_RPC_SUCCESS;
         sendResult(sockFD, REGISTER_SUCCESS, &code);
 
 	}catch(failure& e){
+		 // send REGISTER_FAILURE with warning code
 		 int code = ERR_RPC_PROC_RE_REG;
 		 sendResult(sockFD, REGISTER_FAILURE, &code);
 	}
@@ -369,6 +378,9 @@ void Binder::proc_location_request(int sockFD, char* message, bool cache){
 
     try{
     	if(map_it != sig_to_location.end() && map_it->second.size() > 0){
+    		// if cache is enabled, send the list of all available servers
+    		// otherwise, choose the next server by using Round Robin algm
+    		// and send it to the client
     		if(cache){
     			sendCache(sockFD, LOC_SUCCESS, map_it->second); 
     		}else{
@@ -549,6 +561,7 @@ void Binder::start(){
     int len = sizeof(sockaddr_in);
     bool stop = false;
 
+    // create binder socket and listem
     setup_socket();
 
     // save socket of each connection in this vector

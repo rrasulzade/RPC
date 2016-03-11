@@ -4,8 +4,8 @@
 #include <stdio.h>
 
 // #define	DEBUGALL
-#define	DEBUGERROR
-#define	DEBUGWARNING
+// #define	DEBUGERROR
+// #define	DEBUGWARNING
 
 
 

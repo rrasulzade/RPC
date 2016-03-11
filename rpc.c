@@ -663,7 +663,7 @@ int check_termination_protocol(int *termination){
 		DEBUG("returning ERR_RPC_BINDER_SOCK_CLOSED");
 		return ERR_RPC_BINDER_SOCK_CLOSED;
 	}
-	if (bytesRcvd <= 0) {
+	if (bytesRcvd < 0) {
 		ERROR("ERROR: bytes rcvd is negative!");
 		return ERR_RPC_SOCKET_FAILED;
 	}

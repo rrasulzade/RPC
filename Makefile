@@ -1,7 +1,7 @@
 XCC			=	gcc
 AR			=	ar
 ARFLAGS		=	rcs
-CFLAGS		=	-c -Wall -g -std=c99 -pthread -DNUM_THREADS=100
+CFLAGS		=	-c -Wall -g -std=c99 -pthread -DNUM_THREADS=50
 CXX			=	g++
 CXXFLAGS	=	-Wall -MMD -g
 
