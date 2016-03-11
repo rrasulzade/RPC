@@ -1,10 +1,13 @@
 #!/bin/bash
 
-rm -f server client
+rm -f *~ client clientMULTI server serverA serverB serverC serverD serverE
 make clean
 make
 
-gcc -L. client1.c -lrpc -pthread -o client
+gcc -L. -std=c99 client1.c -lrpc -pthread -o client
+gcc -L. -std=c99 clientMULTI.c -lrpc -pthread -o clientMULTI
+
+
 gcc -L. server_functions.c server_function_skels.c server.c  -lrpc -pthread -o server
 gcc -L. server_functions.c server_function_skels.c serverA.c  -lrpc -pthread -o serverA
 gcc -L. server_functions.c server_function_skels.c serverB.c  -lrpc -pthread -o serverB
