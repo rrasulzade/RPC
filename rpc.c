@@ -115,6 +115,11 @@ int create_binder_sock(){
 		return ERR_RPC_ENV_ADDR_NULL;
 	}
 	struct hostent *he = gethostbyname(env);
+	if(he == NULL){
+		ERROR("ERROR: NULL POINTER in he variable! Exiting...");
+		close(binder_sock);
+		return ERR_RPC_ENV_ADDR_NULL;
+	}
 	memcpy (&binder.sin_addr, he->h_addr_list[0], he->h_length);
 	
 	binder.sin_family = AF_INET;
@@ -984,6 +989,11 @@ int create_server_connection (int *server_sock, location *server_loc){
 	}
 	
 	struct hostent *he = gethostbyname(server_loc->s_id.addr.hostname);
+	if(he == NULL){
+		ERROR("ERROR: NULL POINTER in he variable! Exiting...");
+		close(binder_sock);
+		return ERR_RPC_ENV_ADDR_NULL;
+	}
 	memcpy (&server.sin_addr, he->h_addr_list[0], he->h_length);
 	server.sin_family = AF_INET;
 	server.sin_port = server_loc->s_port;
