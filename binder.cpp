@@ -88,7 +88,7 @@ int recvMsg(int sockFD, char data[], unsigned int msg_len){
 	while (bytesRemain > 0) {
 		received = recv(sockFD, msg, bytesRemain, 0);
 		if (received <= 0) {
-			cerr << "ERROR: on receiving message" << endl;
+			// cerr << "ERROR: on receiving message" << endl;
 			return received;
 		}
 		msg += received;
@@ -210,7 +210,6 @@ int Binder::handle_message(int sockFD){
    	switch(msgType){
    		case REGISTER:
    			proc_registration(sockFD, msg);
-   			printMap();
    			break;
    		case LOC_REQUEST_CACHE:
    			cache = true;	
