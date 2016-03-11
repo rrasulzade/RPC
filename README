@@ -1,5 +1,6 @@
-                            CS454 Assignment 3
-Rasul Rasulzade (rrasulza 20488806) ------ Nurlan Masimli (nmasimli 20490844)
+	   CS454 Assignment 3
+Rasul Rasulzade (rrasulza 20488806)
+Nurlan Masimli (nmasimli 20490844)
 
 Binder is implemented in C++ and compiled with "g++" (works on the student server).
 Rpc is implemented in C and compiled with "gcc" (works on the student server).
