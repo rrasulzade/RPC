@@ -81,6 +81,7 @@ int queue_pop (intQueue *Q, int *data){
 	
 	struct node *del_node = Q->head;	
 	if (Q->size == 0) {
+		pthread_mutex_unlock(&Qmutex);
 		return ERR_QUEUE_ERROR;
 	}
 	else if (Q->size == 1) {

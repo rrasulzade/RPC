@@ -353,13 +353,13 @@ int handle_request (int sock){
 	int bytesRcvd = 0, msg_type = 0, ret_code = ERR_RPC_SUCCESS;
 	
 	bytesRcvd = recv_loop(sock, &msg_len, 4);
-	if (bytesRcvd < 0) {
+	if (bytesRcvd <= 0) {
 		ERROR("bytes rcvd is negative!");
 		return ERR_RPC_SOCKET_FAILED;
 	}
 	
 	bytesRcvd = recv_loop(sock, &msg_type, 4);
-	if (bytesRcvd < 0) {
+	if (bytesRcvd <= 0) {
 		ERROR("bytes rcvd is negative!");
 		return ERR_RPC_SOCKET_FAILED;
 	}
@@ -371,7 +371,7 @@ int handle_request (int sock){
 	
 	char *msg_offset = msg_req+sizeof(unsigned)+sizeof(int);
 	bytesRcvd = recv_loop(sock, msg_offset, msg_len);
-	if (bytesRcvd < 0) {
+	if (bytesRcvd <= 0) {
 		ERROR("bytes rcvd is negative!");
 		free(msg_req);
 		return ERR_RPC_SOCKET_FAILED;
@@ -469,6 +469,7 @@ void *worker_code (void *ptr){
 		// if sock == -1, then termination signal has been sent.
 		if (sock == -1) break;
 		ret_code = handle_request(sock);
+		/*if (ret_code < 0)*/ close(sock);
 	}
 	
 	DEBUG("worker_code is returning...");
@@ -773,21 +774,21 @@ int binder_reg_send_rcv(char *msg, unsigned total_len){
 	
 	// receive the length of the message
 	bytesRcvd = recv_loop(binder_sock, &rcv_len, 4);
-	if (bytesRcvd < 0) {
+	if (bytesRcvd <= 0) {
 		ERROR("bytesRcvd=%d", bytesRcvd);
 		return ERR_RPC_BINDER_SOCK_FAILED;
 	}
 	
 	// receive the type of the message
 	bytesRcvd = recv_loop(binder_sock, &msg_type, 4);
-	if (bytesRcvd < 0) {
+	if (bytesRcvd <= 0) {
 		ERROR("bytesRcvd=%d", bytesRcvd);
 		return ERR_RPC_BINDER_SOCK_FAILED;
 	}
 	
 	// receive the reason code for failure, warning or success
 	bytesRcvd = recv_loop(binder_sock, &reason_code, 4);
-	if (bytesRcvd < 0) {
+	if (bytesRcvd <= 0) {
 		ERROR("bytesRcvd=%d", bytesRcvd);
 		return ERR_RPC_BINDER_SOCK_FAILED;
 	}
@@ -916,13 +917,13 @@ int binder_loc_req(char *msg, unsigned total_len, location *server_loc, int isCa
 	int bytesRcvd = 0, msg_type = 0, ret_code = ERR_RPC_SUCCESS;
 	
 	bytesRcvd = recv_loop(binder_sock, &msg_len, 4);
-	if (bytesRcvd < 0) {
+	if (bytesRcvd <= 0) {
 		ERROR("returning ERR_RPC_SOCKET_FAILED. bytesRcvd=%d", bytesRcvd);
 		return ERR_RPC_SOCKET_FAILED;
 	}
 	
 	bytesRcvd = recv_loop(binder_sock, &msg_type, 4);
-	if (bytesRcvd < 0) {
+	if (bytesRcvd <= 0) {
 		ERROR("returning ERR_RPC_SOCKET_FAILED. bytesRcvd=%d", bytesRcvd);
 		return ERR_RPC_SOCKET_FAILED;
 	}
@@ -935,7 +936,7 @@ int binder_loc_req(char *msg, unsigned total_len, location *server_loc, int isCa
 	memset(rcv_buff, 0, msg_len*sizeof(char));
 	
 	bytesRcvd = recv_loop(binder_sock, rcv_buff, msg_len);
-	if (bytesRcvd < 0) {
+	if (bytesRcvd <= 0) {
 		ERROR("returning ERR_RPC_SOCKET_FAILED. bytesRcvd=%d", bytesRcvd);
 		free(rcv_buff);
 		return ERR_RPC_SOCKET_FAILED;
@@ -1018,13 +1019,13 @@ int rcv_from_server (int *server_sock, char *msg_response, unsigned total_msg_le
 	int msg_type, bytesRcvd;
 	
 	bytesRcvd = recv_loop(*server_sock, &msg_len, sizeof(unsigned));
-	if (bytesRcvd < 0) {
+	if (bytesRcvd <= 0) {
 		ERROR("returning ERR_RPC_SOCKET_FAILED. bytesRcvd=%d", bytesRcvd);
 		return ERR_RPC_SOCKET_FAILED;
 	}
 	
 	bytesRcvd = recv_loop(*server_sock, &msg_type, sizeof(int));
-	if (bytesRcvd < 0) {
+	if (bytesRcvd <= 0) {
 		ERROR("returning ERR_RPC_SOCKET_FAILED. bytesRcvd=%d", bytesRcvd);
 		return ERR_RPC_SOCKET_FAILED;
 	}
@@ -1032,7 +1033,7 @@ int rcv_from_server (int *server_sock, char *msg_response, unsigned total_msg_le
 	*((int*)(msg_response+sizeof(unsigned))) = msg_type;
 	
 	bytesRcvd = recv_loop(*server_sock, msg_response+sizeof(unsigned)+sizeof(int), msg_len);
-	if (bytesRcvd < 0){
+	if (bytesRcvd <= 0){
 		ERROR("rcv_from_server() is returning ERR_RPC_SOCKET_FAILED");
 		return ERR_RPC_SERVER_SOCK_FAILED;
 	}
@@ -1148,15 +1149,19 @@ int proc_call_to_server (location *server_loc, char *msg, char *msg_response, un
 	
 	ret = send_to_server (&server_sock, msg, total_msg_len);
 	if (ret != ERR_RPC_SUCCESS) {
+		close(server_sock);
 		ERROR("proc_call_to_server() is returning. send_to_server() failed...");
 		return ret;
 	}
 	
 	ret = rcv_from_server (&server_sock, msg_response, total_msg_len);
 	if (ret != ERR_RPC_SUCCESS) {
+		close(server_sock);
 		ERROR("proc_call_to_server() is returning. rcv_from_server() failed...");
 		return ret;
 	}
+	
+	close(server_sock);
 	
 	return ERR_RPC_SUCCESS;
 }
