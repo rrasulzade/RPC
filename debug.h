@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 
-#define	DEBUGALL
+// #define	DEBUGALL
 #define	DEBUGERROR
 #define	DEBUGWARNING
 
