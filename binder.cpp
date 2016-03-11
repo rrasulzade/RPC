@@ -102,8 +102,6 @@ int recvMsg(int sockFD, char data[], unsigned int msg_len){
 // LOC_FAILURE, REGISTER_FAILURE, REGISTER_SUCCESS, TERMINATE and UNKNOWN
 // message types with return code
 int sendResult(int sockFD, int type, void* data){ 
-	__INFO("");
-
 	unsigned int msg_len = 0, total_len = sizeof(msg_len) + sizeof(type);
 	int status = 0;
 	char* msg;
@@ -162,8 +160,6 @@ Binder::Binder(void){}
 
 // Binder detructor
 Binder::~Binder(void){
-	__INFO("");
-
 	map<ProcSignature, list<ProcLocation> >::iterator map_it = sig_to_location.begin();
     for(; map_it != sig_to_location.end(); map_it++){
     	delete [] map_it->first.procInfo.argTypes;
@@ -250,8 +246,6 @@ void Binder::proc_registration(int sockFD, char * message){
 	memcpy(&loc.locationInfo, message, sizeof(location));
 	loc.socketFD = sockFD;
 
-	cout << "SERVER SockFD " << sockFD << endl;
-
 	char *p = message + sizeof(location);
 
 	// read procedure name
@@ -268,7 +262,7 @@ void Binder::proc_registration(int sockFD, char * message){
 	try{
 		proc.procInfo.argTypes = new int[argLen+1];
 	}catch(bad_alloc& e){
-		cerr << "new failed: ERR_BINDER_OUT_OF_MEMORY" << endl; 
+		// cerr << "new failed: ERR_BINDER_OUT_OF_MEMORY" << endl; 
     	int code = ERR_BINDER_OUT_OF_MEMORY;
 	    sendResult(sockFD, REGISTER_FAILURE, &code);
 	    return;
@@ -282,7 +276,6 @@ void Binder::proc_registration(int sockFD, char * message){
 	// to indicate that this argType requires array
 	// otherwise, length is 0 for scalar paramaters 
 	for(unsigned int i = 0; i < proc.procInfo.argLen &&  (proc.procInfo.argTypes[i] & 0x0000ffff) > 0; i++){
-		// if((proc.procInfo.argTypes[i] & 0x0000ffff) > 0)
 			proc.procInfo.argTypes[i] = (proc.procInfo.argTypes[i] & 0xffff0000) + 0x00000001;
 	}
 
@@ -319,7 +312,6 @@ void Binder::proc_registration(int sockFD, char * message){
 	    	sig_to_location.insert(pair<ProcSignature, list<ProcLocation> >(proc, loc_set));    		
 	    }
 
-	    cout << "send SUCCESS  <msg_type + msg_size + ERR_RPC_SUCCESS >" << endl;
 	    if(getServerIndex(sockFD) < 0){
 		    server_sockets.push_back(sockFD);
 	    }
@@ -328,7 +320,6 @@ void Binder::proc_registration(int sockFD, char * message){
         sendResult(sockFD, REGISTER_SUCCESS, &code);
 
 	}catch(failure& e){
-		 cout << "send FAILURE  <msg_type + msg_size + ERR_RPC_PROC_RE_REG >" << endl;
 		 int code = ERR_RPC_PROC_RE_REG;
 		 sendResult(sockFD, REGISTER_FAILURE, &code);
 	}
@@ -338,8 +329,6 @@ void Binder::proc_registration(int sockFD, char * message){
 
 // handle requests from client that needs the server location
 void Binder::proc_location_request(int sockFD, char* message, bool cache){
-	__INFO("");
-
 	ProcSignature proc;
 	memset(&proc, 0, sizeof(ProcSignature));
 
@@ -357,7 +346,7 @@ void Binder::proc_location_request(int sockFD, char* message, bool cache){
     try{
 		proc.procInfo.argTypes = new int[argLen+1];
 	}catch(bad_alloc& e){
-		cerr << "New failed: ERR_BINDER_OUT_OF_MEMORY" << endl; 
+		// cerr << "New failed: ERR_BINDER_OUT_OF_MEMORY" << endl; 
     	int code = ERR_BINDER_OUT_OF_MEMORY;
 	    sendResult(sockFD, LOC_FAILURE, &code);
 	    return;
@@ -369,7 +358,6 @@ void Binder::proc_location_request(int sockFD, char* message, bool cache){
 
 	// change array length to 1 to indicate that this parameter is an array
 	for(unsigned int i = 0; i < proc.procInfo.argLen && (proc.procInfo.argTypes[i] & 0x0000ffff) > 0; i++){
-		// if((proc.procInfo.argTypes[i] & 0x0000ffff) > 0)
 			proc.procInfo.argTypes[i] = (proc.procInfo.argTypes[i] & 0xffff0000) + 0x00000001;
 	}
 
@@ -391,7 +379,7 @@ void Binder::proc_location_request(int sockFD, char* message, bool cache){
     		throw failure();
     	}
     }catch(failure& e){
-    	cerr << "LOC_FAILURE: ERR_RPC_NO_SERVER_AVAIL" << endl; 
+    	// cerr << "LOC_FAILURE: ERR_RPC_NO_SERVER_AVAIL" << endl; 
     	int code = ERR_RPC_NO_SERVER_AVAIL;
 	    sendResult(sockFD, LOC_FAILURE, &code);
     }
@@ -425,8 +413,6 @@ ProcLocation Binder::roundRobinServer(list<ProcLocation>& loc_set){
 // adds the given server location to the server queue, if they are
 // not on the queue
 void Binder::addToServerQueue(ProcLocation& loc){
-	__INFO("");
-
 	list<ProcLocation>::iterator list_it = server_queue.begin();
 	for(; list_it != server_queue.end(); list_it++){
 		if (*list_it == loc)
@@ -441,8 +427,6 @@ void Binder::addToServerQueue(ProcLocation& loc){
 // mapped by the same procedure to the server queue if they are not 
 // on the queue
 void Binder::addToServerQueue(list<ProcLocation>& loc_set){
-	__INFO("");
-
 	list<ProcLocation>::iterator set_it = loc_set.begin();
 	list<ProcLocation>::iterator list_it = server_queue.begin();
 	for(; set_it != loc_set.end(); set_it++){
@@ -456,8 +440,6 @@ void Binder::addToServerQueue(list<ProcLocation>& loc_set){
 
 // send TERMINATE message to all servers to stop
 int Binder::terminateServers(){
-	__INFO("");
-
 	int type = TERMINATE;
 	vector<int>::iterator v_it = server_sockets.begin();
 
@@ -465,10 +447,9 @@ int Binder::terminateServers(){
 		int code = ERR_RPC_SUCCESS;
 		int status = sendResult(*v_it, type, &code);
 		if(status < 0){
-			cerr << "ERROR: on terminating servers"<< endl; 
+			// cerr << "ERROR: on terminating servers"<< endl; 
 			return status;			
 		}
-		cout << "TERMINATE sent to " << *v_it << endl;
 	}
 	return ERR_BINDER_TERMINATE_SIG;
 }
@@ -502,10 +483,7 @@ void Binder::removeServer(int socketFD){
     		list<ProcLocation>::iterator set_it = map_it->second.begin();
     		for(; set_it != map_it->second.end() ; set_it++){
     			if(set_it->socketFD == socketFD){
-    				// cout << "FOUND" << endl;
     				set_it = map_it->second.erase(set_it);
-    				// printMap();
-    				// cout << "REMOVED" << endl;
     			}
     		}
 		}
@@ -526,8 +504,6 @@ void Binder::removeServer(int socketFD){
 // create socket, then bind binder_addr to socket
 // then listen for socket connections
 void Binder::setup_socket(){
-	__INFO("");
-
     sockaddr_in binder_sockaddr, sock_in;
     int status;
     int len = sizeof(sockaddr_in);
@@ -540,14 +516,14 @@ void Binder::setup_socket(){
     // create a socket
     binder_sockFD = socket(AF_INET, SOCK_STREAM, 0);
     if (binder_sockFD < 0) {
-        cerr << "ERROR: server socket cannot initialized" << endl;
+        // cerr << "ERROR: server socket cannot initialized" << endl;
         return;
     }
     
     // bind the binder socket to the current IP address on port
     status = bind(binder_sockFD, (struct sockaddr*)&binder_sockaddr, (socklen_t)len);
     if(status < 0){
-        cerr << "ERROR: on binding" << endl;
+        // cerr << "ERROR: on binding" << endl;
         return;
     }
     
@@ -600,7 +576,7 @@ void Binder::start(){
         // block here and wait for connection
         int active_clients = select( max_fd + 1 , &readfds , NULL , NULL , NULL);
         if (active_clients < 0){
-            cerr << "ERROR: on select()"<< endl;
+            // cerr << "ERROR: on select()"<< endl;
             return;
         }
         
@@ -618,30 +594,26 @@ void Binder::start(){
                     // connect to client, accept the data
                     connected_sockFD = accept(binder_sockFD, (sockaddr*)&connected_sockaddr, (socklen_t *)&len);
                     if (connected_sockFD < 0) {
-                        cerr << "ERROR: on accept()" << endl;
+                        // cerr << "ERROR: on accept()" << endl;
                         return;
                     }
-
-                    cout << "New conncetion " << connected_sockFD << endl;
 
                     // add new socket to connections vector and fd set
                     connections.push_back(connected_sockFD);
                     max_fd = max_fd < connected_sockFD ? connected_sockFD : max_fd;
                 }else{
                     // already accepted, receive msg and capitalaze text
-                    cout << "handle_message " << connections[i] << endl;
                     status = handle_message(connections[i]);
 
                     // TERMINATE msg is received 
                     if (status == ERR_BINDER_TERMINATE_SIG){
-                    	cerr << "Terminate binder " << endl;
+                    	// cerr << "Terminate binder " << endl;
                     	stop = true;
                     	break;
                     }
 
                     // erroneous msg is received or connection is closed
                     if (status <= 0 ) {
-                    	cout << "Close connection socket " << connections[i] << " index " << i << endl;
                         close(connections[i]);
                         FD_CLR(connections[i], &readfds);
                      
