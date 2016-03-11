@@ -101,7 +101,6 @@ int main(int argc, char *argv[]) {
 
   f1_register();
   f4_register();
-  f2a_register();
   
   /* call rpcExecute */
   rpcExecute();
