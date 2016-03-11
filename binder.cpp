@@ -75,7 +75,7 @@ bool operator==(const ProcLocation& lhs, const ProcLocation& rhs){
 
 ///////////////////////////////////////// Helper Functions  /////////////////////////////////////////////////
 
-// loop until requires amount of data is not received
+// receive required amount of data
 int recvMsg(int sockFD, char data[], unsigned int msg_len){
 	if (msg_len <= 0) {
 		return 0;
@@ -85,6 +85,7 @@ int recvMsg(int sockFD, char data[], unsigned int msg_len){
 	int received = 0;
 	char *msg = data;
 
+	// loop until required amount of data is not received
 	while (bytesRemain > 0) {
 		received = recv(sockFD, msg, bytesRemain, 0);
 		if (received <= 0) {
@@ -274,7 +275,7 @@ void Binder::proc_registration(int sockFD, char * message){
 	// if any of the argTypes contains array length, change that length to 1
 	// to indicate that this argType requires array
 	// otherwise, length is 0 for scalar paramaters 
-	for(unsigned int i = 0; i < proc.procInfo.argLen &&  (proc.procInfo.argTypes[i] & 0x0000ffff) > 0; i++){
+	for(unsigned int i = 0; i < proc.procInfo.argLen && (proc.procInfo.argTypes[i] & 0x0000ffff) > 0; i++){
 			proc.procInfo.argTypes[i] = (proc.procInfo.argTypes[i] & 0xffff0000) + 0x00000001;
 	}
 
@@ -326,7 +327,7 @@ void Binder::proc_registration(int sockFD, char * message){
 
 
 
-// handle requests from client that needs the server location
+// handle location requests from client that needs the server location
 void Binder::proc_location_request(int sockFD, char* message, bool cache){
 	ProcSignature proc;
 	memset(&proc, 0, sizeof(ProcSignature));
@@ -533,18 +534,16 @@ void Binder::setup_socket(){
     char hostname[MAX_HOSTNAME_SIZE+1];
 	gethostname(hostname, MAX_HOSTNAME_SIZE);
 	hostname[MAX_HOSTNAME_SIZE] = '\0';
-    cout << "export BINDER_ADDRESS=" << hostname << endl;
+    cout << "BINDER_ADDRESS " << hostname << endl;
     
     // get binder port number and print
     getsockname(binder_sockFD, (struct sockaddr *)&sock_in, (socklen_t *)&len);
-    cout << "export BINDER_PORT=" << ntohs(sock_in.sin_port) << endl;
+    cout << "BINDER_PORT " << ntohs(sock_in.sin_port) << endl;
 }
 
 
 
 void Binder::start(){
-	__INFO("");
-
 	sockaddr_in connected_sockaddr;
     int connected_sockFD , status;
     int len = sizeof(sockaddr_in);
@@ -629,44 +628,7 @@ void Binder::start(){
             i++;
         }
     }
-    
     close(binder_sockFD);
-}
-
-
-
-
-void Binder::printMap(){
-  // debug("print");
-  map<ProcSignature, list<ProcLocation> >::iterator map_it = sig_to_location.begin();
-  for(; map_it != sig_to_location.end(); map_it++){
-    cout << map_it->first.procInfo.proc_name <<  " Arglen: " <<  map_it->first.procInfo.argLen <<" -> " << endl;
-    list<ProcLocation>:: iterator set_it = map_it->second.begin();
-    for(; set_it != map_it->second.end(); set_it++){
-      cout << "   "
-         << set_it->locationInfo.s_id.addr.hostname << " "      
-             << ntohs(set_it->locationInfo.s_port) << endl;
-    }
-    cout << endl;
-  }
-}
-
-
-void Binder::printList(){
-  list<ProcLocation>::iterator list_it = server_queue.begin();
-  for(;list_it != server_queue.end(); list_it++){
-    cout << "   "
-       << list_it->locationInfo.s_id.addr.hostname << " "     
-           << ntohs(list_it->locationInfo.s_port) << endl;
-  }
-
-  cout << endl << endl;
-
-  cout << "Socket Vector:" << endl; 
-  for(unsigned int i = 0; i < server_sockets.size(); i++){
-  		cout << "   " << server_sockets[i] << endl;
-  }
-
 }
 
 
@@ -678,6 +640,4 @@ int main(int argc, const char * argv[]) {
     binder.start();
     return 0;
 }
-
-
 

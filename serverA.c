@@ -2,6 +2,41 @@
 #include "server_function_skels.h"
 
 
+// void Binder::printMap(){
+//   // debug("print");
+//   map<ProcSignature, list<ProcLocation> >::iterator map_it = sig_to_location.begin();
+//   for(; map_it != sig_to_location.end(); map_it++){
+//     cout << map_it->first.procInfo.proc_name <<  " Arglen: " <<  map_it->first.procInfo.argLen <<" -> " << endl;
+//     list<ProcLocation>:: iterator set_it = map_it->second.begin();
+//     for(; set_it != map_it->second.end(); set_it++){
+//       cout << "   "
+//          << set_it->locationInfo.s_id.addr.hostname << " "      
+//              << ntohs(set_it->locationInfo.s_port) << endl;
+//     }
+//     cout << endl;
+//   }
+// }
+
+
+// void Binder::printList(){
+//   list<ProcLocation>::iterator list_it = server_queue.begin();
+//   for(;list_it != server_queue.end(); list_it++){
+//     cout << "   "
+//        << list_it->locationInfo.s_id.addr.hostname << " "     
+//            << ntohs(list_it->locationInfo.s_port) << endl;
+//   }
+
+//   cout << endl << endl;
+
+//   cout << "Socket Vector:" << endl; 
+//   for(unsigned int i = 0; i < server_sockets.size(); i++){
+//   		cout << "   " << server_sockets[i] << endl;
+//   }
+
+// }
+
+
+
 void f0_register(){
   int count0 = 3;
   int argTypes0[count0 + 1];

@@ -52,11 +52,6 @@ class Binder{
   	int terminateServers();
   	int getServerIndex(int socketFD);
 	void removeServer(int socketFD);
-
-
-  	void printList();
-  	void printMap();
-
 };
 
 
