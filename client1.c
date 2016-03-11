@@ -259,12 +259,12 @@ void f4_call (){
 
 void f5_call (){
   /* prepare the arguemtns for f4 */
-  int a5[4] = {4, 6, 2, 7};
+  int a5[8] = {8, 6, 2, 7, 12, 56, 78, 23};
   int count5 = 1;
   int argTypes5[count5 + 1];
   void **args5;
 
-  argTypes5[0] = (1 << ARG_OUTPUT) | (1 << ARG_INPUT) | (ARG_INT << 16) | 4;
+  argTypes5[0] = (1 << ARG_OUTPUT) | (1 << ARG_INPUT) | (ARG_INT << 16) | 8;
   argTypes5[1] = 0;
 
   args5 = (void **)malloc(count5 * sizeof(void *));
@@ -276,7 +276,7 @@ void f5_call (){
   if (s5 >= 0) {
     printf("ACTUAL return of f5 is: ");
     int i;
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < 8; i++) {
       printf(" %d", *(((int *)args5[0]) + i));
     }
     printf("\n");

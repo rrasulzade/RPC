@@ -78,7 +78,7 @@ void f5_register(){
   int count5 = 1;
   int argTypes5[count5 + 1];
 
-  argTypes5[0] = (1 << ARG_OUTPUT) | (1 << ARG_INPUT) | (ARG_INT << 16) | 5;
+  argTypes5[0] = (1 << ARG_OUTPUT) | (1 << ARG_INPUT) | (ARG_INT << 16) | 1;
   argTypes5[1] = 0;
 
   rpcRegister("f5", argTypes5, *f5_Skel);
