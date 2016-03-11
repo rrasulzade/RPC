@@ -111,6 +111,7 @@ int create_binder_sock(){
 	char *env = getenv("BINDER_ADDRESS");
 	if (env == NULL) {
 		ERROR("ERROR: NULL POINTER in env[addr] variable! Exiting...");
+		close(binder_sock);
 		return ERR_RPC_ENV_ADDR_NULL;
 	}
 	struct hostent *he = gethostbyname(env);
@@ -122,6 +123,7 @@ int create_binder_sock(){
 	env = getenv("BINDER_PORT");
 	if (env == NULL) {
 		ERROR("ERROR: NULL POINTER in env[port] variable! Exiting...");
+		close(binder_sock);
 		return ERR_RPC_ENV_PORT_NULL;
 	}
 	binder.sin_port = htons (atoi(env));
@@ -129,6 +131,7 @@ int create_binder_sock(){
 	// connect to the binder
 	if (connect (binder_sock, (struct sockaddr *)&binder, sizeof(binder)) < 0) {
 		ERROR("ERROR: Could not connect to the binder! Exiting...");
+		close(binder_sock);
 		return ERR_RPC_BINDER_SOCK_FAILED;
 	}
 	
