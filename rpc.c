@@ -27,10 +27,15 @@
 // Definitions for Cache implementation
 #define		CACHE_SIZE		64
 struct locations {
+	//proc_sig proc_sig_arr[CACHE_SIZE];
 	location loc_arr[CACHE_SIZE];
-	int next_index;
-	int num_valid_entries;
+	unsigned next_index;
+	unsigned num_valid_entries;
 };
+
+// Cache
+static struct locations loc_cache;
+
 
 
 
@@ -46,11 +51,8 @@ static intQueue intQ;
 
 // worker threads to be able to handle multiple requests at a time
 static pthread_t worker_threads[NUM_THREADS];
+static int num_created_threads = 0;
 
-
-
-// Cache
-static struct locations loc_cache;
 
 
 /* 	
@@ -323,6 +325,23 @@ char *proc_sig_unmarshal (proc_sig *sig, char *msg_offset){
 }
 
 
+int recv_loop (int sock, void *buff, unsigned recvlen){
+	int bytesRcvd = 0, totalBytesRcvd = 0;
+	
+	while (totalBytesRcvd < recvlen){
+		bytesRcvd = recv(sock, buff+totalBytesRcvd, recvlen-totalBytesRcvd, 0);
+		
+		if (bytesRcvd <= 0) {
+			ERROR("returning error. bytes rcvd is  <= 0 !");
+			return bytesRcvd;
+		}
+		
+		totalBytesRcvd += bytesRcvd;
+	}
+	
+	return totalBytesRcvd;
+}
+
 
 int handle_request (int sock){
 	DEBUG("handle_request is called");
@@ -330,15 +349,15 @@ int handle_request (int sock){
 	unsigned msg_len = 0, total_len = 0;
 	int bytesRcvd = 0, msg_type = 0, ret_code = ERR_RPC_SUCCESS;
 	
-	bytesRcvd = recv(sock, &msg_len, 4, 0);
+	bytesRcvd = recv_loop(sock, &msg_len, 4);
 	if (bytesRcvd < 0) {
-		ERROR("ERROR: bytes rcvd is negative!");
+		ERROR("bytes rcvd is negative!");
 		return ERR_RPC_SOCKET_FAILED;
 	}
 	
-	bytesRcvd = recv(sock, &msg_type, 4, 0);
+	bytesRcvd = recv_loop(sock, &msg_type, 4);
 	if (bytesRcvd < 0) {
-		ERROR("ERROR: bytes rcvd is negative!");
+		ERROR("bytes rcvd is negative!");
 		return ERR_RPC_SOCKET_FAILED;
 	}
 	
@@ -348,9 +367,9 @@ int handle_request (int sock){
 	memset(msg_req, 0, total_len);
 	
 	char *msg_offset = msg_req+sizeof(unsigned)+sizeof(int);
-	bytesRcvd = recv(sock, msg_offset, msg_len, 0);
+	bytesRcvd = recv_loop(sock, msg_offset, msg_len);
 	if (bytesRcvd < 0) {
-		ERROR("ERROR: bytes rcvd is negative!");
+		ERROR("bytes rcvd is negative!");
 		free(msg_req);
 		return ERR_RPC_SOCKET_FAILED;
 	}
@@ -479,6 +498,7 @@ int rpcInit() {
 	for (int i = 0; i < NUM_THREADS; i++){
 		int ret = pthread_create (&worker_threads[i], NULL, worker_code, NULL);
 		if (ret < 0) {
+			num_created_threads = i;
 			ERROR("ERROR: Could not create a worker thread! Exiting...");
 			return ERR_RPC_THREAD_NOT_CREATED;
 		}
@@ -553,7 +573,7 @@ int check_termination_protocol(int *termination){
 	// rcv msg from binder and check if it is termination request.
 	// If yes terminate by setting *termination to 1, resume execution otherwise.
 	int bytesRcvd, msg_type, reason_code; unsigned msg_len;
-	bytesRcvd = recv(binder_sock, &msg_len, 4, 0);
+	bytesRcvd = recv_loop(binder_sock, &msg_len, 4);
 	DEBUG("bytesRcvd=%d", bytesRcvd);
 	if (bytesRcvd == 0){
 		*termination = 1;
@@ -565,14 +585,14 @@ int check_termination_protocol(int *termination){
 		return ERR_RPC_SOCKET_FAILED;
 	}
 	
-	bytesRcvd = recv(binder_sock, &msg_type, 4, 0);
+	bytesRcvd = recv_loop(binder_sock, &msg_type, 4);
 	DEBUG("bytesRcvd=%d", bytesRcvd);
 	if (bytesRcvd < 0) {
 		ERROR("ERROR: bytes rcvd is negative!");
 		return ERR_RPC_BINDER_SOCK_FAILED;
 	}
 	
-	bytesRcvd = recv(binder_sock, &reason_code, 4, 0);
+	bytesRcvd = recv_loop(binder_sock, &reason_code, 4);
 	DEBUG("bytesRcvd=%d", bytesRcvd);
 	if (bytesRcvd < 0) {
 		ERROR("ERROR: bytes rcvd is negative!");
@@ -624,12 +644,12 @@ static inline int process_sockets (fd_set *fds, int *termination) {
 static inline int terminate_worker_threads (){
 	DEBUG("terminate_worker_threads () is called...");
 	// send termination signal to worker threads
-	for (int i = 0; i < NUM_THREADS; i++){
+	for (int i = 0; i < num_created_threads; i++){
 		if (queue_push (&intQ, -1)) return ERR_RPC_OUT_OF_MEMORY;
 	}
 	
 	// wait for workers' termination
-	for (int i = 0; i < NUM_THREADS; i++){
+	for (int i = 0; i < num_created_threads; i++){
 		pthread_join (worker_threads[i], NULL);
 	}
 	DEBUG("terminate_worker_threads () is returning...");
@@ -696,51 +716,6 @@ static inline unsigned arglen (int *argTypes){
 	return arglen;
 }
 
-
-
-int binder_reg_send_rcv(char *msg, unsigned total_len){
-	// send msg to the binder and receive the result
-	if (send (binder_sock, msg, total_len, 0) < 0) {
-		ERROR("ERROR: Sending register msg to the binder failed!");
-		return ERR_RPC_BINDER_SOCK_FAILED;
-	}
-	
-	// receive the result from the binder
-	int bytesRcvd, rcv_len, msg_type, reason_code;
-	
-	// receive the length of the message
-	bytesRcvd = recv(binder_sock, &rcv_len, 4, 0);
-	if (bytesRcvd < 0) {
-		ERROR("bytesRcvd=%d", bytesRcvd);
-		return ERR_RPC_BINDER_SOCK_FAILED;
-	}
-	
-	// receive the type of the message
-	bytesRcvd = recv(binder_sock, &msg_type, 4, 0);
-	if (bytesRcvd < 0) {
-		ERROR("bytesRcvd=%d", bytesRcvd);
-		return ERR_RPC_BINDER_SOCK_FAILED;
-	}
-	
-	// receive the reason code for failure, warning or success
-	bytesRcvd = recv(binder_sock, &reason_code, 4, 0);
-	if (bytesRcvd < 0) {
-		ERROR("bytesRcvd=%d", bytesRcvd);
-		return ERR_RPC_BINDER_SOCK_FAILED;
-	}
-	
-	if (msg_type == REGISTER_FAILURE){
-		ERROR("rpcRegister() is returning... REGISTER_FAILURE");
-		return reason_code;
-	}
-	
-	else if (msg_type != REGISTER_SUCCESS){
-		ERROR("rpcRegister() is returning... ERR_RPC_UNEXPECTED_MSG_TYPE");
-		return ERR_RPC_UNEXPECTED_MSG_TYPE;
-	}
-	return ERR_RPC_SUCCESS;
-}
-
 static inline void marshall_binder_reg_msg (char *msg, unsigned msg_len, char* name, int argLen, int* argTypes){
 	// marshall the registration details into the message
 	char *msg_offset = msg;
@@ -779,6 +754,51 @@ char *create_binder_reg_msg (char* name, int argLen, int* argTypes){
 	
 	// return dynamically allocated message
 	return msg;
+}
+
+
+
+int binder_reg_send_rcv(char *msg, unsigned total_len){
+	// send msg to the binder and receive the result
+	if (send (binder_sock, msg, total_len, 0) < 0) {
+		ERROR("ERROR: Sending register msg to the binder failed!");
+		return ERR_RPC_BINDER_SOCK_FAILED;
+	}
+	
+	// receive the result from the binder
+	int bytesRcvd, rcv_len, msg_type, reason_code;
+	
+	// receive the length of the message
+	bytesRcvd = recv_loop(binder_sock, &rcv_len, 4);
+	if (bytesRcvd < 0) {
+		ERROR("bytesRcvd=%d", bytesRcvd);
+		return ERR_RPC_BINDER_SOCK_FAILED;
+	}
+	
+	// receive the type of the message
+	bytesRcvd = recv_loop(binder_sock, &msg_type, 4);
+	if (bytesRcvd < 0) {
+		ERROR("bytesRcvd=%d", bytesRcvd);
+		return ERR_RPC_BINDER_SOCK_FAILED;
+	}
+	
+	// receive the reason code for failure, warning or success
+	bytesRcvd = recv_loop(binder_sock, &reason_code, 4);
+	if (bytesRcvd < 0) {
+		ERROR("bytesRcvd=%d", bytesRcvd);
+		return ERR_RPC_BINDER_SOCK_FAILED;
+	}
+	
+	if (msg_type == REGISTER_FAILURE){
+		ERROR("rpcRegister() is returning... REGISTER_FAILURE");
+		return reason_code;
+	}
+	
+	else if (msg_type != REGISTER_SUCCESS){
+		ERROR("rpcRegister() is returning... ERR_RPC_UNEXPECTED_MSG_TYPE");
+		return ERR_RPC_UNEXPECTED_MSG_TYPE;
+	}
+	return ERR_RPC_SUCCESS;
 }
 
 
@@ -847,9 +867,41 @@ int rpcRegister(char *name, int *argTypes, skeleton f) {
 	return ret;
 }
 
+/*
+// Definitions for Cache implementation
+#define		CACHE_SIZE		64
+struct locations {
+	location loc_arr[CACHE_SIZE];
+	unsigned next_index;
+	unsigned num_valid_entries;
+};
 
+// Cache
+static struct locations loc_cache;
+*/
 
-int binder_loc_req(char *msg, unsigned total_len, location *server_loc){
+// INCOMPLETE
+int cacheUpdate (char *rcv_buff, unsigned msg_len){
+	location *dst_loc;
+	unsigned num_new_locs = msg_len/sizeof(location);
+	if (num_new_locs == 0) return ERR_RPC_INCOMPLETE_MSG;
+	for (unsigned i = 0; i < num_new_locs; i++){
+		dst_loc = &loc_cache.loc_arr[(loc_cache.next_index+i)%CACHE_SIZE];
+		memcpy(dst_loc, rcv_buff+(i*sizeof(location)), sizeof(location));
+		loc_cache.num_valid_entries++;
+	}
+	loc_cache.next_index = (loc_cache.next_index+num_new_locs)%CACHE_SIZE;
+	
+	return ERR_RPC_SUCCESS;
+}
+
+// INCOMPLETE
+int locateFromCache(location *server_loc){
+	
+	return ERR_RPC_SUCCESS;
+}
+
+int binder_loc_req(char *msg, unsigned total_len, location *server_loc, int isCache){
 	DEBUG("binder_loc_req() is called...");
 	
 	if (send (binder_sock, msg, total_len, 0) < 0) {
@@ -860,13 +912,13 @@ int binder_loc_req(char *msg, unsigned total_len, location *server_loc){
 	unsigned msg_len = 0;
 	int bytesRcvd = 0, msg_type = 0, ret_code = ERR_RPC_SUCCESS;
 	
-	bytesRcvd = recv(binder_sock, &msg_len, 4, 0);
+	bytesRcvd = recv_loop(binder_sock, &msg_len, 4);
 	if (bytesRcvd < 0) {
 		ERROR("returning ERR_RPC_SOCKET_FAILED. bytesRcvd=%d", bytesRcvd);
 		return ERR_RPC_SOCKET_FAILED;
 	}
 	
-	bytesRcvd = recv(binder_sock, &msg_type, 4, 0);
+	bytesRcvd = recv_loop(binder_sock, &msg_type, 4);
 	if (bytesRcvd < 0) {
 		ERROR("returning ERR_RPC_SOCKET_FAILED. bytesRcvd=%d", bytesRcvd);
 		return ERR_RPC_SOCKET_FAILED;
@@ -879,7 +931,7 @@ int binder_loc_req(char *msg, unsigned total_len, location *server_loc){
 	}
 	memset(rcv_buff, 0, msg_len*sizeof(char));
 	
-	bytesRcvd = recv(binder_sock, rcv_buff, msg_len, 0);
+	bytesRcvd = recv_loop(binder_sock, rcv_buff, msg_len);
 	if (bytesRcvd < 0) {
 		ERROR("returning ERR_RPC_SOCKET_FAILED. bytesRcvd=%d", bytesRcvd);
 		free(rcv_buff);
@@ -895,7 +947,18 @@ int binder_loc_req(char *msg, unsigned total_len, location *server_loc){
 		ret_code = ERR_RPC_UNEXPECTED_MSG_TYPE;
 	}
 	else {
-		memcpy(server_loc, rcv_buff, sizeof(location));
+		// received the location data successfully
+		if (isCache) {	// INCOMPELTE AND NOT USED
+			// copy the data received into the cache
+			cacheUpdate (rcv_buff, msg_len);
+			
+			// store the next server location into the server_loc
+			locateFromCache(server_loc);
+		}
+		else {
+			// store the server location into the server_loc
+			memcpy(server_loc, rcv_buff, sizeof(location));
+		}
 		DEBUG("Received: LOC_SUCCESS. host:%s\tport=%d", server_loc->s_id.addr.hostname, ntohs(server_loc->s_port));
 	}
 	
@@ -948,11 +1011,29 @@ int send_to_server (int *server_sock, char *msg, unsigned total_msg_len){
 
 int rcv_from_server (int *server_sock, char *msg_response, unsigned total_msg_len){
 	DEBUG("rcv_from_server() is called...");
-	int bytesRcvd = recv(*server_sock, msg_response, total_msg_len, 0);
+	unsigned msg_len;
+	int msg_type, bytesRcvd;
+	
+	bytesRcvd = recv_loop(*server_sock, &msg_len, sizeof(unsigned));
+	if (bytesRcvd < 0) {
+		ERROR("returning ERR_RPC_SOCKET_FAILED. bytesRcvd=%d", bytesRcvd);
+		return ERR_RPC_SOCKET_FAILED;
+	}
+	
+	bytesRcvd = recv_loop(*server_sock, &msg_type, sizeof(int));
+	if (bytesRcvd < 0) {
+		ERROR("returning ERR_RPC_SOCKET_FAILED. bytesRcvd=%d", bytesRcvd);
+		return ERR_RPC_SOCKET_FAILED;
+	}
+	*((unsigned*)msg_response) = msg_len;
+	*((int*)(msg_response+sizeof(unsigned))) = msg_type;
+	
+	bytesRcvd = recv_loop(*server_sock, msg_response+sizeof(unsigned)+sizeof(int), msg_len);
 	if (bytesRcvd < 0){
 		ERROR("rcv_from_server() is returning ERR_RPC_SOCKET_FAILED");
 		return ERR_RPC_SERVER_SOCK_FAILED;
 	}
+	
 	DEBUG("rcv_from_server() is returning... bytesRcvd=%d", bytesRcvd);
 	return ERR_RPC_SUCCESS;
 }
@@ -997,12 +1078,14 @@ unsigned total_exec_msg_len (int* argTypes){
 
 
 
-void marshall_loc_req_msg(char* name, unsigned argLen, int* argTypes, unsigned loc_req_len, char *msg){
+void marshall_loc_req_msg(char* name, unsigned argLen, int* argTypes, unsigned loc_req_len, char *msg, int isCache){
 	char *msg_offset = msg;
 	*((unsigned *) msg_offset) = loc_req_len;
 	
 	msg_offset += sizeof(unsigned);
 	*((int *) msg_offset) = LOC_REQUEST;
+	
+	if (isCache) *((int *) msg_offset) = LOC_REQUEST_CACHE;
 	
 	msg_offset += sizeof(int);
 	strncpy(msg_offset, name, MAX_PROC_NAME_SIZE);
@@ -1016,14 +1099,14 @@ void marshall_loc_req_msg(char* name, unsigned argLen, int* argTypes, unsigned l
 
 
 
-int locate_server(char* name, int* argTypes, void** args, char *msg, location *server_loc) {
+int locate_server(char* name, int* argTypes, void** args, char *msg, location *server_loc, int isCache) {
 	// find arglen
 	unsigned argLen = arglen (argTypes);
 	
 	// find the location request length
 	unsigned loc_req_len = (MAX_PROC_NAME_SIZE+1)*sizeof(char) + (1+argLen+1)*sizeof(int);
 	
-	marshall_loc_req_msg(name, argLen, argTypes, loc_req_len, msg);
+	marshall_loc_req_msg(name, argLen, argTypes, loc_req_len, msg, isCache);
 	
 	char *msg_offset = msg 	+ sizeof(unsigned) + sizeof(int) + (MAX_PROC_NAME_SIZE+1)*sizeof(char)
 							+ sizeof(unsigned) + (argLen+1)*sizeof(int);
@@ -1037,7 +1120,7 @@ int locate_server(char* name, int* argTypes, void** args, char *msg, location *s
 		ERROR("locate_server() is returning. create_binder_sock() failed...");
 		return ret;
 	}
-	ret = binder_loc_req(msg, sizeof(unsigned) + sizeof(int) + loc_req_len, server_loc);
+	ret = binder_loc_req(msg, sizeof(unsigned) + sizeof(int) + loc_req_len, server_loc, isCache);
 	close(binder_sock);
 	
 	if (ret != ERR_RPC_SUCCESS) {
@@ -1076,9 +1159,9 @@ int proc_call_to_server (location *server_loc, char *msg, char *msg_response, un
 }
 
 
-
-int rpcCall(char* name, int* argTypes, void** args) {
-	DEBUG("rpcCall() is called...");
+int rpcCallOptionCache(char* name, int* argTypes, void** args, int isCache){
+	
+	DEBUG("rpcCallOptionCache() is called...");
 	
 	location server_loc;
 	memset(&server_loc, 0, sizeof(location));
@@ -1092,18 +1175,18 @@ int rpcCall(char* name, int* argTypes, void** args) {
 	if (msg == NULL || msg_response == NULL) {
 		if (msg) free(msg);
 		if (msg_response) free(msg_response);
-		ERROR("rpcCall() is returning. OUT_OF_MEMORY...");
+		ERROR("rpcCallOptionCache() is returning. OUT_OF_MEMORY...");
 		return ERR_RPC_OUT_OF_MEMORY;
 	}
 	memset (msg, 0, total_msg_len);
 	memset (msg_response, 0, total_msg_len);
 	
 	// find the server location for execution request
-	int ret = locate_server(name, argTypes, args, msg, &server_loc);
+	int ret = locate_server(name, argTypes, args, msg, &server_loc, isCache);
 	if(ret != ERR_RPC_SUCCESS){
 		free(msg);
 		free(msg_response);
-		ERROR("rpcCall() is returning. locate_server() failed...");
+		ERROR("rpcCallOptionCache() is returning. locate_server() failed...");
 		return ret;
 	}
 	
@@ -1119,7 +1202,7 @@ int rpcCall(char* name, int* argTypes, void** args) {
 	if(ret != ERR_RPC_SUCCESS){
 		free(msg);
 		free(msg_response);
-		ERROR("rpcCall() is returning. proc_call_to_server() failed...");
+		ERROR("rpcCallOptionCache() is returning. proc_call_to_server() failed...");
 		return ret;
 	}
 	
@@ -1128,84 +1211,25 @@ int rpcCall(char* name, int* argTypes, void** args) {
 	if(ret != ERR_RPC_SUCCESS){
 		free(msg);
 		free(msg_response);
-		ERROR("rpcCall() is returning. handle_server_response() failed...");
+		ERROR("rpcCallOptionCache() is returning. handle_server_response() failed...");
 		return ret;
 	}
 	
 	free(msg);
 	free(msg_response);
 	
-	DEBUG("rpcCall() is returning...ret=%d", ret);
+	DEBUG("rpcCallOptionCache() is returning...ret=%d", ret);
 	return ret;
 }
 
 
-int rpcCacheCall(char* name, int* argTypes, void** args){
-	DEBUG("rpcCacheCall() is called...");
-	
-	static int initialized = 0;
-	if (!initialized){
-		// initialize
-		memset(&loc_cache, 0, sizeof(struct locations));
-		initialized = 1;
-	}
-	
-	
-	location server_loc;
-	memset(&server_loc, 0, sizeof(location));
-	
-	// find the length of the message needed
-	unsigned total_msg_len = total_exec_msg_len(argTypes);
-	
-	// allocate space for request 'execute' and response (location request is a submsg of execute)
-	char *msg			= malloc(total_msg_len);
-	char *msg_response 	= malloc(total_msg_len);
-	if (msg == NULL || msg_response == NULL) {
-		if (msg) free(msg);
-		if (msg_response) free(msg_response);
-		ERROR("rpcCacheCall() is returning. OUT_OF_MEMORY...");
-		return ERR_RPC_OUT_OF_MEMORY;
-	}
-	memset (msg, 0, total_msg_len);
-	memset (msg_response, 0, total_msg_len);
-	
-	// find the server location for execution request
-	int ret = locate_server(name, argTypes, args, msg, &server_loc);
-	if(ret != ERR_RPC_SUCCESS){
-		free(msg);
-		free(msg_response);
-		ERROR("rpcCacheCall() is returning. locate_server() failed...");
-		return ret;
-	}
-	
-	// SUCCESSFULLY located the server. Prepare the execution request for later use (modify type and length of the msg)
-	char * msg_offset = msg;
-	*((unsigned *) msg_offset) = total_msg_len - (sizeof(unsigned) + sizeof(int));
-	
-	msg_offset += sizeof(unsigned);
-	*((int *) msg_offset) = EXECUTE;
-	
-	// connect and make a execute request from the server
-	ret = proc_call_to_server(&server_loc, msg, msg_response, total_msg_len);
-	if(ret != ERR_RPC_SUCCESS){
-		free(msg);
-		free(msg_response);
-		ERROR("rpcCacheCall() is returning. proc_call_to_server() failed...");
-		return ret;
-	}
-	
-	// handle the response received
-	ret = handle_server_response (args, msg_response);
-	if(ret != ERR_RPC_SUCCESS){
-		free(msg);
-		free(msg_response);
-		ERROR("rpcCacheCall() is returning. handle_server_response() failed...");
-		return ret;
-	}
-	
-	free(msg);
-	free(msg_response);
-	
-	DEBUG("rpcCacheCall() is returning...ret=%d", ret);
-	return ret;
+
+int rpcCall(char* name, int* argTypes, void** args) {
+	return rpcCallOptionCache(name, argTypes, args, 0);
+}
+
+
+
+int rpcCacheCall(char* name, int* argTypes, void** args) {
+	return rpcCallOptionCache(name, argTypes, args, 1);
 }
