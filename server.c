@@ -74,6 +74,28 @@ void f4_register(){
 
 
 
+void f5_register(){
+  int count5 = 1;
+  int argTypes5[count5 + 1];
+
+  argTypes5[0] = (1 << ARG_OUTPUT) | (1 << ARG_INPUT) | (ARG_INT << 16) | 5;
+  argTypes5[1] = 0;
+
+  rpcRegister("f5", argTypes5, *f5_Skel);
+}
+
+void f5a_register(){
+  int count5 = 1;
+  int argTypes5[count5 + 1];
+
+  /* same here, 28 is the exact length of the parameter */
+  argTypes5[0] = (1 << ARG_OUTPUT) | (1 << ARG_INPUT) | (ARG_INT << 16);
+  argTypes5[1] = 0;
+
+  rpcRegister("f5", argTypes5, *f5a_Skel);
+}
+
+
 
 
 int main(int argc, char *argv[]) {
@@ -86,6 +108,9 @@ int main(int argc, char *argv[]) {
   f2_register();
   f3_register();
   f4_register();
+
+  f5a_register();
+  f5_register();
   
   /* call rpcExecute */
   rpcExecute();

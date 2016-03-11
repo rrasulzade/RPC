@@ -257,6 +257,64 @@ void f4_call (){
 }
 
 
+void f5_call (){
+  /* prepare the arguemtns for f4 */
+  int a5[4] = {4, 6, 2, 7};
+  int count5 = 1;
+  int argTypes5[count5 + 1];
+  void **args5;
+
+  argTypes5[0] = (1 << ARG_OUTPUT) | (1 << ARG_INPUT) | (ARG_INT << 16) | 4;
+  argTypes5[1] = 0;
+
+  args5 = (void **)malloc(count5 * sizeof(void *));
+  args5[0] = (void *)a5;
+  
+  
+  int s5 = rpcCall("f5", argTypes5, args5);
+
+  if (s5 >= 0) {
+    printf("ACTUAL return of f5 is: ");
+    int i;
+    for (i = 0; i < 4; i++) {
+      printf(" %d", *(((int *)args5[0]) + i));
+    }
+    printf("\n");
+  }
+  else {
+    printf("Error: %d\n", s5);
+  }
+
+
+  free(args5);
+}
+
+void f5a_call (){
+  /* prepare the arguemtns for f4 */
+  int a5 = 4;
+  int count5 = 1;
+  int argTypes5[count5 + 1];
+  void **args5;
+
+  argTypes5[0] = (1 << ARG_OUTPUT) | (1 << ARG_INPUT) | (ARG_INT << 16);
+  argTypes5[1] = 0;
+
+  args5 = (void **)malloc(count5 * sizeof(void *));
+  args5[0] = (void *)&a5;
+  
+  int s5 = rpcCall("f5", argTypes5, args5);
+
+  if (s5 >= 0) {
+    printf("ACTUAL return of f5 is: ");
+    printf(" %d", *(((int *)args5[0])));
+    printf("\n");
+  }
+  else {
+    printf("Error: %d\n", s5);
+  }
+
+  free(args5);
+}
 
 
 int main() {
@@ -268,6 +326,9 @@ int main() {
   f3_call ();
   f3a_call();
   f4_call ();
+
+  f5_call();
+  f5a_call();
 
 
   /* rpcTerminate */

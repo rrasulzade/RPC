@@ -42,3 +42,14 @@ int f4_Skel(int *argTypes, void **args) {
   return -1; /* can not print the file */
 }
 
+
+
+int f5_Skel(int *argTypes, void **args) {
+    f5((int *)(*args));
+    return 0;
+}
+
+int f5a_Skel(int *argTypes, void **args) {
+    f5a(*((int *)(*args)));
+    return 0;
+}

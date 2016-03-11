@@ -71,3 +71,18 @@ void f4(char a[]) {
 
   /* print file a to a printer */
 }
+
+
+void f5(int a[]) {
+ 
+  int len = a[0];
+  int i;
+  for(i = 0; i < len; i++){
+    a[i] *=  10;
+  }
+}
+
+void f5a(int a) {
+  
+  a *= 10;
+}
