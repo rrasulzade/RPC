@@ -2,12 +2,12 @@
 #define		__DEBUG_H__
 
 #include <stdio.h>
-/*
+
 #define	DEBUGALL
 #define	DEBUGERROR
 #define	DEBUGWARNING
 
-*/
+
 
 
 
