@@ -1,4 +1,4 @@
-#RPC - Remote Procedure Call - Distributed Systems project
+# RPC - Remote Procedure Call - Distributed Systems project
 Binder is implemented in C++ and compiled with "g++" 
 Rpc is implemented in C and compiled with "gcc" 
 
