@@ -1,9 +1,6 @@
-	   CS454 Assignment 3
-Rasul Rasulzade (rrasulza 20488806)
-Nurlan Masimli (nmasimli 20490844)
-
-Binder is implemented in C++ and compiled with "g++" (works on the student server).
-Rpc is implemented in C and compiled with "gcc" (works on the student server).
+#RPC - Remote Procedure Call - Distributed Systems project
+Binder is implemented in C++ and compiled with "g++" 
+Rpc is implemented in C and compiled with "gcc" 
 
 The makefile is written for the GNU Make 3.81 (the version on the student server).
 
